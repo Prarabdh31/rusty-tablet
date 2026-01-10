@@ -10,21 +10,16 @@ const REGIONS = ['US', 'IN', 'UK', 'JP', 'Global', 'EU', 'Mars Colony'];
 const SENTIMENTS = ['Objective', 'Critical', 'Supportive', 'Satirical', 'Investigative', 'Opinionated'];
 const COMPLEXITIES = ['EASY', 'GENERAL', 'TECHNICAL'];
 const RSS_FEEDS = [
-  // Tech & Global
   { label: 'The Verge (Tech)', url: 'https://www.theverge.com/rss/index.xml' },
   { label: 'Hackaday (Hardware)', url: 'https://hackaday.com/blog/feed/' },
   { label: 'TechCrunch (Startups)', url: 'https://techcrunch.com/feed/' },
   { label: 'Reuters (Business)', url: 'https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best' },
   { label: 'BBC (World)', url: 'http://feeds.bbci.co.uk/news/world/rss.xml' },
-  
-  // NDTV
   { label: 'NDTV (Top Stories)', url: 'https://feeds.feedburner.com/ndtvnews-top-stories' },
   { label: 'NDTV (Latest)', url: 'https://feeds.feedburner.com/ndtvnews-latest' },
   { label: 'NDTV (Trending)', url: 'https://feeds.feedburner.com/ndtvnews-trending-news' },
   { label: 'NDTV (Movies)', url: 'https://feeds.feedburner.com/ndtvmovies-latest' },
   { label: 'NDTV (India)', url: 'https://feeds.feedburner.com/ndtvnews-india-news' },
-
-  // Times of India (TOI)
   { label: 'TOI (Top Stories)', url: 'https://timesofindia.indiatimes.com/rssfeedstopstories.cms' },
   { label: 'TOI (Most Recent)', url: 'https://timesofindia.indiatimes.com/rssfeedmostrecent.cms' },
   { label: 'TOI (India)', url: 'https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms' },
@@ -110,10 +105,7 @@ export default function AdminDashboard() {
 
   // --- MANAGER HANDLERS ---
   const fetchArticles = async () => {
-    if (!authKey) {
-      // If no key, we can't fetch unpublished articles anyway
-      return; 
-    }
+    if (!authKey) return; 
     setManagerLoading(true);
     
     try {
@@ -146,7 +138,6 @@ export default function AdminDashboard() {
       return;
     }
 
-    // Optimistic UI Update
     setArticles(prev => prev.map(a => a.id === id ? { ...a, is_published: !currentStatus } : a));
 
     try {
@@ -161,7 +152,6 @@ export default function AdminDashboard() {
 
       if (!response.ok) {
         throw new Error('Update failed');
-        // Revert on failure
         fetchArticles();
       }
     } catch (error) {
@@ -230,22 +220,22 @@ export default function AdminDashboard() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         
         {/* Header */}
-        <div className="flex items-center justify-between mb-8 border-b-4 border-[#2C3E50] pb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b-4 border-[#2C3E50] pb-6 gap-4">
           <div className="flex items-center gap-4">
             <div className="bg-[#2C3E50] p-3 rounded-sm text-[#F5F5F1]">
-              <Terminal size={32} />
+              <Terminal size={24} />
             </div>
             <div>
-              <h1 className="font-serif text-3xl font-bold uppercase tracking-wide">Ghost Writer Engine</h1>
-              <p className="text-[#64748B] font-mono text-sm">Editorial Control Room v3.0</p>
+              <h1 className="font-serif text-2xl md:text-3xl font-bold uppercase tracking-wide">Ghost Writer</h1>
+              <p className="text-[#64748B] font-mono text-xs md:text-sm">Control Room v3.0</p>
             </div>
           </div>
           
           {/* Tab Switcher */}
-          <div className="flex bg-white border border-[#2C3E50]/20 rounded-sm p-1">
+          <div className="flex bg-white border border-[#2C3E50]/20 rounded-sm p-1 w-full md:w-auto">
             <button
               onClick={() => setActiveTab('GENERATOR')}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm transition-colors ${
+              className={`flex-1 md:flex-none px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm transition-colors ${
                 activeTab === 'GENERATOR' ? 'bg-[#2C3E50] text-white' : 'text-[#64748B] hover:bg-[#F5F5F1]'
               }`}
             >
@@ -253,22 +243,22 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('MANAGER')}
-              className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm transition-colors ${
+              className={`flex-1 md:flex-none px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-sm transition-colors ${
                 activeTab === 'MANAGER' ? 'bg-[#2C3E50] text-white' : 'text-[#64748B] hover:bg-[#F5F5F1]'
               }`}
             >
-              Article Manager
+              Manager
             </button>
           </div>
         </div>
 
         {/* --- VIEW: GENERATOR --- */}
         {activeTab === 'GENERATOR' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
             
             {/* Control Panel */}
             <div className="lg:col-span-7">
-              <form onSubmit={handleGenerate} className="space-y-8 bg-white p-8 border border-[#2C3E50]/10 rounded-sm shadow-sm">
+              <form onSubmit={handleGenerate} className="space-y-6 md:space-y-8 bg-white p-4 md:p-8 border border-[#2C3E50]/10 rounded-sm shadow-sm">
                 
                 {/* AUTH */}
                 <div>
@@ -294,26 +284,26 @@ export default function AdminDashboard() {
                     <button
                       type="button"
                       onClick={() => setMode('MANUAL')}
-                      className={`flex items-center justify-center gap-2 p-4 border rounded-sm transition-all ${
+                      className={`flex items-center justify-center gap-2 p-4 border rounded-sm transition-all text-sm font-medium ${
                         mode === 'MANUAL' ? 'bg-[#2C3E50] text-white' : 'bg-white text-[#64748B] border-[#2C3E50]/20'
                       }`}
                     >
-                      <FileText size={18} /> Manual Text
+                      <FileText size={16} /> Manual
                     </button>
                     <button
                       type="button"
                       onClick={() => setMode('SPECIFIC_RSS')}
-                      className={`flex items-center justify-center gap-2 p-4 border rounded-sm transition-all ${
+                      className={`flex items-center justify-center gap-2 p-4 border rounded-sm transition-all text-sm font-medium ${
                         mode === 'SPECIFIC_RSS' ? 'bg-[#2C3E50] text-white' : 'bg-white text-[#64748B] border-[#2C3E50]/20'
                       }`}
                     >
-                      <Rss size={18} /> RSS Feed
+                      <Rss size={16} /> RSS Feed
                     </button>
                   </div>
                 </div>
 
                 {/* INPUT */}
-                <div className="bg-[#F5F5F1]/50 p-6 border border-[#2C3E50]/10 rounded-sm">
+                <div className="bg-[#F5F5F1]/50 p-4 md:p-6 border border-[#2C3E50]/10 rounded-sm">
                   {mode === 'MANUAL' ? (
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Source Material</label>
@@ -345,7 +335,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* SETTINGS GRID */}
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <span className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Region</span>
                     <select value={region} onChange={(e) => setRegion(e.target.value)} className="w-full bg-white border border-[#2C3E50]/20 p-2 text-sm rounded-sm">
@@ -370,7 +360,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="flex gap-6">
+                <div className="flex flex-col md:flex-row gap-4 md:gap-6">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={includeSidebar} onChange={e => setIncludeSidebar(e.target.checked)} className="accent-[#B7410E]" />
                     <span className="text-sm font-medium">Sidebar</span>
@@ -389,7 +379,7 @@ export default function AdminDashboard() {
 
             {/* Output Console */}
             <div className="lg:col-span-5">
-              <div className="bg-[#2C3E50] text-[#F5F5F1] p-6 rounded-sm shadow-lg h-full min-h-[500px] font-mono text-sm relative overflow-hidden">
+              <div className="bg-[#2C3E50] text-[#F5F5F1] p-6 rounded-sm shadow-lg h-auto lg:h-full lg:min-h-[500px] font-mono text-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-32 bg-[#B7410E] rounded-full blur-3xl opacity-5 pointer-events-none"></div>
                 <h3 className="border-b border-[#F5F5F1]/20 pb-4 mb-4 font-bold uppercase tracking-wider flex items-center gap-2">
                   System Output <div className={`w-2 h-2 rounded-full ${genLoading ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>
@@ -401,7 +391,7 @@ export default function AdminDashboard() {
                     <div className="animate-in fade-in">
                       <div className="text-green-400 mb-4">SUCCESS: Article Published.</div>
                       <div className="space-y-2">
-                        <div><span className="text-[#B7410E]">TITLE:</span> {genResult.title}</div>
+                        <div className="truncate"><span className="text-[#B7410E]">TITLE:</span> {genResult.title}</div>
                         <div><span className="text-[#B7410E]">AUTHOR:</span> {genResult.author}</div>
                         <div className="border-t border-[#F5F5F1]/20 pt-4 mt-4">
                           <a href={`/article/${genResult.slug || ''}`} target="_blank" className="inline-flex items-center gap-2 text-white hover:text-[#B7410E]">
@@ -421,7 +411,7 @@ export default function AdminDashboard() {
         {/* --- VIEW: MANAGER --- */}
         {activeTab === 'MANAGER' && (
           <div className="bg-white border border-[#2C3E50]/10 rounded-sm shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-[#2C3E50]/10 flex justify-between items-center bg-[#F5F5F1]/30">
+            <div className="p-4 md:p-6 border-b border-[#2C3E50]/10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#F5F5F1]/30">
               <h2 className="font-bold text-[#2C3E50] uppercase tracking-wider text-sm flex items-center gap-2">
                 <List size={16} /> Article Repository
               </h2>
@@ -441,29 +431,29 @@ export default function AdminDashboard() {
                 <table className="w-full text-sm text-left">
                   <thead className="bg-[#2C3E50] text-[#F5F5F1] text-xs uppercase font-bold">
                     <tr>
-                      <th className="px-6 py-3">Title</th>
-                      <th className="px-6 py-3">Category</th>
-                      <th className="px-6 py-3">Status</th>
-                      <th className="px-6 py-3">Date</th>
-                      <th className="px-6 py-3 text-right">Actions</th>
+                      <th className="px-4 md:px-6 py-3 min-w-[200px]">Title</th>
+                      <th className="px-4 md:px-6 py-3">Category</th>
+                      <th className="px-4 md:px-6 py-3">Status</th>
+                      <th className="px-4 md:px-6 py-3">Date</th>
+                      <th className="px-4 md:px-6 py-3 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#2C3E50]/10">
                     {articles.map((post) => (
                       <tr key={post.id} className="hover:bg-[#F5F5F1]/50 transition-colors">
-                        <td className="px-6 py-4 font-bold text-[#2C3E50] max-w-xs truncate">{post.title}</td>
-                        <td className="px-6 py-4 text-[#64748B]">{post.category}</td>
-                        <td className="px-6 py-4">
+                        <td className="px-4 md:px-6 py-4 font-bold text-[#2C3E50] max-w-xs truncate">{post.title}</td>
+                        <td className="px-4 md:px-6 py-4 text-[#64748B]">{post.category}</td>
+                        <td className="px-4 md:px-6 py-4">
                           <span className={`px-2 py-1 rounded-sm text-[10px] font-bold uppercase tracking-wide ${
                             post.is_published ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'
                           }`}>
                             {post.is_published ? 'Published' : 'Archived'}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-[#64748B] whitespace-nowrap" suppressHydrationWarning>
+                        <td className="px-4 md:px-6 py-4 text-[#64748B] whitespace-nowrap" suppressHydrationWarning>
                           {new Date(post.created_at).toLocaleDateString()}
                         </td>
-                        <td className="px-6 py-4 text-right flex justify-end gap-2">
+                        <td className="px-4 md:px-6 py-4 text-right flex justify-end gap-2">
                           <button 
                             onClick={() => window.open(`/article/${post.slug}`, '_blank')}
                             className="p-2 text-[#64748B] hover:text-[#2C3E50] hover:bg-[#2C3E50]/5 rounded-sm" 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { Menu, X, Globe, User, LogOut, Loader2, Check } from 'lucide-react';
+import { Menu, X, Globe, User, LogOut, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { createBrowserClient } from '@supabase/ssr';
 
@@ -25,7 +25,6 @@ export default function Navbar() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
 
-  // Check current language on mount
   useEffect(() => {
     const match = document.cookie.match(/(^|;) ?googtrans=([^;]*)(;|$)/);
     if (match) {
@@ -47,9 +46,8 @@ export default function Navbar() {
       return;
     }
     setSubscribing(true);
-    // Simple subscribe logic for logged in user
     const { error } = await supabase.from('subscribers').insert({ email: user.email });
-    if (!error || error.code === '23505') { // Success or already exists
+    if (!error || error.code === '23505') { 
       setSubscribed(true);
       setTimeout(() => setSubscribed(false), 3000);
     }
@@ -79,7 +77,6 @@ export default function Navbar() {
             
             <div className="h-6 w-px bg-[#2C3E50]/20"></div>
             
-            {/* Language Switcher */}
             <div className="relative group h-12 flex items-center">
               <button className="flex items-center gap-2 text-[#2C3E50] hover:text-[#B7410E] transition-colors py-2">
                 <Globe size={18} />
@@ -100,20 +97,16 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* Subscribe Button */}
             <button 
               onClick={handleSubscribe}
               disabled={subscribing || subscribed}
               className={`px-4 py-2 rounded-sm text-sm font-medium transition-all w-28 flex justify-center items-center ${
-                subscribed 
-                  ? 'bg-green-600 text-white' 
-                  : 'bg-[#2C3E50] text-[#F5F5F1] hover:bg-[#B7410E]'
+                subscribed ? 'bg-green-600 text-white' : 'bg-[#2C3E50] text-[#F5F5F1] hover:bg-[#B7410E]'
               }`}
             >
               {subscribing ? <Loader2 size={16} className="animate-spin" /> : subscribed ? <Check size={16} /> : 'Subscribe'}
             </button>
 
-            {/* Auth Profile Section */}
             {authLoading ? (
               <div className="w-8 h-8 rounded-full bg-[#2C3E50]/10 animate-pulse"></div>
             ) : user ? (
@@ -127,8 +120,6 @@ export default function Navbar() {
                     </div>
                   )}
                 </button>
-                
-                {/* User Dropdown */}
                 <div className="absolute right-0 top-full pt-2 w-48 hidden group-hover:block z-50">
                   <div className="bg-white border border-gray-200 shadow-lg rounded-sm overflow-hidden">
                     <div className="px-4 py-3 border-b border-gray-100">
@@ -142,18 +133,14 @@ export default function Navbar() {
                 </div>
               </div>
             ) : (
-              <button 
-                onClick={() => signInWithGoogle()}
-                className="flex items-center gap-2 text-sm font-bold text-[#2C3E50] hover:text-[#B7410E] transition-colors"
-              >
+              <button onClick={() => signInWithGoogle()} className="flex items-center gap-2 text-sm font-bold text-[#2C3E50] hover:text-[#B7410E] transition-colors">
                 <User size={18} /> Login
               </button>
             )}
-
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
+          <div className="md:hidden flex items-center gap-4">
             <button onClick={() => setIsOpen(!isOpen)} className="text-[#2C3E50]">
               {isOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -163,17 +150,55 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {isOpen && (
-        <div className="md:hidden bg-[#F5F5F1] border-b border-[#2C3E50]/10">
+        <div className="md:hidden bg-[#F5F5F1] border-b border-[#2C3E50]/10 max-h-[90vh] overflow-y-auto">
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <Link href="/category/politics" className="block px-3 py-2 text-[#2C3E50] font-medium">Politics</Link>
-            <Link href="/category/industry" className="block px-3 py-2 text-[#2C3E50] font-medium">Industry</Link>
+            <Link href="/category/politics" className="block px-3 py-2 text-[#2C3E50] font-medium" onClick={() => setIsOpen(false)}>Politics</Link>
+            <Link href="/category/industry" className="block px-3 py-2 text-[#2C3E50] font-medium" onClick={() => setIsOpen(false)}>Industry</Link>
+            <Link href="/category/culture" className="block px-3 py-2 text-[#2C3E50] font-medium" onClick={() => setIsOpen(false)}>Culture</Link>
+            
             <div className="border-t border-[#2C3E50]/10 my-2"></div>
+            
+            {/* Mobile Language Switcher */}
+            <div className="px-3 py-2">
+              <span className="text-xs font-bold text-[#B7410E] uppercase tracking-wider mb-2 block">Language</span>
+              <div className="flex flex-wrap gap-2">
+                {languages.map((l) => (
+                  <button 
+                    key={l.code} 
+                    onClick={() => { handleLanguageChange(l.code); setIsOpen(false); }}
+                    className={`text-sm px-3 py-1 rounded-sm border ${
+                      currentLang === l.code 
+                        ? 'bg-[#2C3E50] text-white border-[#2C3E50]' 
+                        : 'bg-white text-[#2C3E50] border-[#2C3E50]/20'
+                    }`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-[#2C3E50]/10 my-2"></div>
+
+            {/* Mobile Auth */}
             {!user ? (
-              <button onClick={() => signInWithGoogle()} className="block w-full text-left px-3 py-2 font-bold text-[#2C3E50]">Login</button>
+              <button onClick={() => { signInWithGoogle(); setIsOpen(false); }} className="block w-full text-left px-3 py-2 font-bold text-[#2C3E50] flex items-center gap-2">
+                <User size={18} /> Login
+              </button>
             ) : (
               <>
-                <div className="px-3 py-2 text-sm text-[#64748B]">{user.email}</div>
-                <button onClick={() => signOut()} className="block w-full text-left px-3 py-2 font-bold text-red-600">Sign Out</button>
+                <div className="px-3 py-2 flex items-center gap-3">
+                  {user.user_metadata?.avatar_url && (
+                    <img src={user.user_metadata.avatar_url} alt="" className="w-8 h-8 rounded-full" />
+                  )}
+                  <div>
+                    <div className="text-sm font-bold text-[#2C3E50]">{user.user_metadata?.full_name}</div>
+                    <div className="text-xs text-[#64748B]">{user.email}</div>
+                  </div>
+                </div>
+                <button onClick={() => { signOut(); setIsOpen(false); }} className="block w-full text-left px-3 py-2 font-bold text-red-600 flex items-center gap-2">
+                  <LogOut size={18} /> Sign Out
+                </button>
               </>
             )}
           </div>

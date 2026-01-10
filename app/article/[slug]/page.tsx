@@ -94,11 +94,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     <main className="min-h-screen bg-[#F5F5F1] font-sans selection:bg-[#B7410E] selection:text-white pb-24">
       <Navbar />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
           
           <article className="lg:col-span-8">
-            <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-[#B7410E] mb-6">
+            <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-[#B7410E] mb-4 md:mb-6 flex-wrap">
               <Link href="/" className="cursor-pointer hover:underline">Home</Link>
               <span className="text-[#2C3E50]/20">/</span>
               <Link href={`/category/${post.category || 'General'}`} className="cursor-pointer hover:underline">
@@ -108,11 +108,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               <span className="text-[#64748B]">{readTime}</span>
             </div>
 
-            <h1 className="font-serif text-3xl md:text-5xl font-bold text-[#2C3E50] leading-[1.1] mb-6 text-left">
+            <h1 className="font-serif text-2xl md:text-5xl font-bold text-[#2C3E50] leading-tight md:leading-[1.1] mb-4 md:mb-6 text-left">
               {post.title}
             </h1>
 
-            <p className="text-xl text-[#64748B] font-serif leading-relaxed italic mb-8 border-l-2 border-[#B7410E] pl-4 text-left">
+            <p className="text-lg md:text-xl text-[#64748B] font-serif leading-relaxed italic mb-8 border-l-2 border-[#B7410E] pl-4 text-left">
               {post.excerpt}
             </p>
 
@@ -132,7 +132,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             </div>
 
             {post.nut_graph && (
-              <div className="bg-[#E5E5E1]/50 border-l-4 border-[#2C3E50] p-6 mb-10 text-[#2C3E50] text-lg font-serif italic">
+              <div className="bg-[#E5E5E1]/50 border-l-4 border-[#2C3E50] p-4 md:p-6 mb-10 text-[#2C3E50] text-base md:text-lg font-serif italic">
                 <span className="block text-xs font-bold uppercase not-italic text-[#64748B] mb-2">Why It Matters</span>
                 {post.nut_graph}
               </div>
@@ -149,7 +149,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
             <div className="
               article-content font-serif text-[#2C3E50] text-lg leading-relaxed
-              prose prose-lg max-w-none 
+              prose prose-base md:prose-lg max-w-none 
               prose-headings:font-bold prose-headings:text-[#2C3E50] 
               prose-p:leading-relaxed prose-p:mb-6
               prose-a:text-[#B7410E] prose-a:no-underline hover:prose-a:underline
@@ -183,7 +183,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
           </article>
 
-          <aside className="lg:col-span-4 space-y-12 border-l border-[#2C3E50]/10 pl-0 lg:pl-12">
+          <aside className="lg:col-span-4 space-y-12 border-l-0 lg:border-l border-[#2C3E50]/10 pl-0 lg:pl-12 pt-8 lg:pt-0 border-t lg:border-t-0">
             
             <NewsletterForm />
             
