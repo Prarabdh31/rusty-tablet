@@ -18,10 +18,18 @@ const formatDate = (dateString: string) => {
   };
   
   const formattedDate = date.toLocaleDateString('en-US', options);
-  const relativeTime = formatDistanceToNow(date, { addSuffix: true });
+  // Remove relative time from server render to avoid hydration mismatch
+  // const relativeTime = formatDistanceToNow(date, { addSuffix: true });
 
-  return `${formattedDate} (${relativeTime})`;
+  return formattedDate; // Return stable date for server render
 };
+
+// Client component wrapper for relative time could be better, but suppressing warning is easier for now
+const RelativeTime = ({ dateString }: { dateString: string }) => {
+  const date = new Date(dateString);
+  const relativeTime = formatDistanceToNow(date, { addSuffix: true });
+  return <span suppressHydrationWarning>{relativeTime}</span>;
+}
 
 const calculateReadTime = (content: string) => {
   if (!content) return '1 min read';
@@ -124,7 +132,7 @@ const CompactCard = ({ post }: { post: any }) => (
           {post.category || 'News'}
         </Link>
         <span className="text-[10px] text-[#64748B] whitespace-nowrap ml-2" suppressHydrationWarning>
-          {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+          <RelativeTime dateString={post.created_at} />
         </span>
       </div>
       <Link href={`/article/${post.slug}`}>
@@ -155,7 +163,7 @@ const CategorySection = ({ category, posts }: { category: string, posts: any[] }
               )}
             </Link>
             <div className="flex justify-between items-center mb-2 text-[10px] text-[#64748B]">
-               <span suppressHydrationWarning>{formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}</span>
+               <span suppressHydrationWarning><RelativeTime dateString={post.created_at} /></span>
                <span>{calculateReadTime(post.content)}</span>
             </div>
             <Link href={`/article/${post.slug}`}>

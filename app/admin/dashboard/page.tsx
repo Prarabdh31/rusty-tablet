@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import Navbar from '@/components/navigation/Navbar';
-import { Loader2, Terminal, CheckCircle, AlertCircle, FileText, Rss, Settings, Send, ArrowRight, List, Edit2, Eye, EyeOff, Trash2, X, Save } from 'lucide-react';
+import { Loader2, Terminal, CheckCircle, AlertCircle, FileText, Rss, Settings, Send, ArrowRight, List, Edit2, Eye, EyeOff, Trash2, X, Save, Newspaper } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 // --- CONFIGURATION OPTIONS ---
 const REGIONS = ['US', 'IN', 'UK', 'JP', 'Global', 'EU', 'Mars Colony'];
 const SENTIMENTS = ['Objective', 'Critical', 'Supportive', 'Satirical', 'Investigative', 'Opinionated'];
 const COMPLEXITIES = ['EASY', 'GENERAL', 'TECHNICAL'];
+const NEWS_CATEGORIES = ['Business', 'Technology', 'Science', 'Health', 'Politics', 'Entertainment', 'Sports'];
+
 const RSS_FEEDS = [
   { label: 'The Verge (Tech)', url: 'https://www.theverge.com/rss/index.xml' },
   { label: 'Hackaday (Hardware)', url: 'https://hackaday.com/blog/feed/' },
@@ -35,9 +37,16 @@ export default function AdminDashboard() {
   const [genLoading, setGenLoading] = useState(false);
   const [genResult, setGenResult] = useState<any>(null);
   const [genError, setGenError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'SPECIFIC_RSS' | 'MANUAL'>('MANUAL');
+  const [mode, setMode] = useState<'SPECIFIC_RSS' | 'MANUAL' | 'NEWS_API_AI'>('MANUAL');
+  
+  // Inputs
   const [rssUrl, setRssUrl] = useState(RSS_FEEDS[0].url);
   const [contentInput, setContentInput] = useState('');
+  const [newsMode, setNewsMode] = useState<'AUTOMATIC' | 'TAILORED'>('AUTOMATIC');
+  const [newsCategory, setNewsCategory] = useState('Technology');
+  const [newsTopic, setNewsTopic] = useState('');
+
+  // Settings
   const [region, setRegion] = useState('Global');
   const [sentiment, setSentiment] = useState('Objective');
   const [complexity, setComplexity] = useState('GENERAL');
@@ -68,6 +77,11 @@ export default function AdminDashboard() {
         config: {
           rss_url: mode === 'SPECIFIC_RSS' ? rssUrl : undefined,
           content_input: mode === 'MANUAL' ? contentInput : undefined,
+          // News API Params
+          news_mode: mode === 'NEWS_API_AI' ? newsMode : undefined,
+          news_category: mode === 'NEWS_API_AI' ? newsCategory : undefined,
+          news_topic: mode === 'NEWS_API_AI' ? newsTopic : undefined,
+          
           target_region: region,
           article_sentiment: sentiment,
           complexity,
@@ -94,8 +108,7 @@ export default function AdminDashboard() {
       }
 
       setGenResult(data);
-      // Refresh manager list if success
-      fetchArticles(); 
+      if (activeTab === 'MANAGER') fetchArticles(); 
     } catch (err: any) {
       setGenError(err.message);
     } finally {
@@ -280,7 +293,7 @@ export default function AdminDashboard() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#B7410E] mb-4">
                     Input Source
                   </label>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <button
                       type="button"
                       onClick={() => setMode('MANUAL')}
@@ -299,12 +312,21 @@ export default function AdminDashboard() {
                     >
                       <Rss size={16} /> RSS Feed
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode('NEWS_API_AI')}
+                      className={`flex items-center justify-center gap-2 p-4 border rounded-sm transition-all text-sm font-medium ${
+                        mode === 'NEWS_API_AI' ? 'bg-[#2C3E50] text-white' : 'bg-white text-[#64748B] border-[#2C3E50]/20'
+                      }`}
+                    >
+                      <Newspaper size={16} /> Smart News
+                    </button>
                   </div>
                 </div>
 
-                {/* INPUT */}
+                {/* DYNAMIC INPUT AREA */}
                 <div className="bg-[#F5F5F1]/50 p-4 md:p-6 border border-[#2C3E50]/10 rounded-sm">
-                  {mode === 'MANUAL' ? (
+                  {mode === 'MANUAL' && (
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Source Material</label>
                       <textarea 
@@ -315,7 +337,9 @@ export default function AdminDashboard() {
                         className="w-full bg-white border border-[#2C3E50]/20 p-4 text-sm rounded-sm focus:border-[#B7410E] outline-none font-mono"
                       />
                     </div>
-                  ) : (
+                  )}
+                  
+                  {mode === 'SPECIFIC_RSS' && (
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Target RSS Feed</label>
                       <select 
@@ -330,6 +354,51 @@ export default function AdminDashboard() {
                         type="url" value={rssUrl} onChange={(e) => setRssUrl(e.target.value)} placeholder="https://..."
                         className="w-full bg-white border border-[#2C3E50]/20 p-3 text-sm rounded-sm focus:border-[#B7410E] outline-none font-mono"
                       />
+                    </div>
+                  )}
+
+                  {mode === 'NEWS_API_AI' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Discovery Mode</label>
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="radio" name="newsMode" checked={newsMode === 'AUTOMATIC'} onChange={() => setNewsMode('AUTOMATIC')} 
+                              className="accent-[#B7410E]"
+                            />
+                            <span className="text-sm">Automatic (By Region/Category)</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input 
+                              type="radio" name="newsMode" checked={newsMode === 'TAILORED'} onChange={() => setNewsMode('TAILORED')} 
+                              className="accent-[#B7410E]"
+                            />
+                            <span className="text-sm">Tailored (Specific Topic)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      {newsMode === 'AUTOMATIC' ? (
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Category</label>
+                          <select 
+                            value={newsCategory} onChange={(e) => setNewsCategory(e.target.value)}
+                            className="w-full bg-white border border-[#2C3E50]/20 p-3 text-sm rounded-sm focus:border-[#B7410E]"
+                          >
+                            {NEWS_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-[#2C3E50] mb-2">Topic Keyword</label>
+                          <input 
+                            type="text" value={newsTopic} onChange={(e) => setNewsTopic(e.target.value)}
+                            placeholder="e.g. NVIDIA AI, Election Results, Mars Rover"
+                            className="w-full bg-white border border-[#2C3E50]/20 p-3 text-sm rounded-sm focus:border-[#B7410E] outline-none"
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
