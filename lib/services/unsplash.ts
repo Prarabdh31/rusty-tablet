@@ -14,7 +14,7 @@ export async function getUnsplashImage(query: string): Promise<string | null> {
   const apiKey = process.env.UNSPLASH_ACCESS_KEY;
 
   if (!apiKey) {
-    console.warn("⚠️ UNSPLASH_ACCESS_KEY missing. Using fallback.");
+    console.error("❌ UNSPLASH_ACCESS_KEY is missing in environment variables.");
     return null;
   }
 
@@ -30,7 +30,9 @@ export async function getUnsplashImage(query: string): Promise<string | null> {
     );
 
     if (!response.ok) {
-      console.warn(`Unsplash API Error: ${response.status} ${response.statusText}`);
+      // Log the exact error for Vercel Runtime Logs
+      const errorText = await response.text();
+      console.error(`❌ Unsplash API Error (${response.status}): ${errorText}`);
       return null;
     }
 
@@ -40,10 +42,11 @@ export async function getUnsplashImage(query: string): Promise<string | null> {
       return data.results[0].urls.regular;
     }
     
+    console.warn(`⚠️ Unsplash found 0 images for query: "${query}"`);
     return null;
 
   } catch (error) {
-    console.error("Unsplash Service Failed:", error);
+    console.error("❌ Unsplash Fetch Failed (Network/System):", error);
     return null;
   }
 }

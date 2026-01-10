@@ -8,6 +8,9 @@ import remarkGfm from 'remark-gfm';
 import { cleanMarkdown } from '@/lib/utils';
 import { getUnsplashImage, getFallbackImage } from '@/lib/services/unsplash';
 import { formatDistanceToNow } from 'date-fns';
+import CommentsSection from '@/components/article/CommentsSection';
+import ShareBar from '@/components/article/ShareBar';
+import NewsletterForm from '@/components/ui/NewsletterForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,22 +33,17 @@ const formatDate = (dateString: string) => {
 };
 
 const calculateReadTime = (content: string) => {
-  if (!content) return '1 min read';
+  const wordsPerMinute = 200; 
   const words = content.trim().split(/\s+/).length;
-  const time = Math.ceil(words / 200);
+  const time = Math.ceil(words / wordsPerMinute);
   return `${time} min read`;
 };
 
-// Helper: Replace [IMAGE: query] with actual image URLs
 async function processInlineImages(content: string) {
   const regex = /\[IMAGE:\s*(.*?)\]/g;
   const matches = [...content.matchAll(regex)];
-  
   if (matches.length === 0) return content;
-
   let newContent = content;
-
-  // Process all matches in parallel
   const replacements = await Promise.all(
     matches.map(async (match) => {
       const query = match[1];
@@ -53,13 +51,9 @@ async function processInlineImages(content: string) {
       return { match: match[0], url, alt: query };
     })
   );
-
-  // Replace in text
   replacements.forEach(({ match, url, alt }) => {
-    // Convert to standard Markdown image syntax
     newContent = newContent.replace(match, `\n\n![${alt}](${url})\n\n`);
   });
-
   return newContent;
 }
 
@@ -67,7 +61,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  // 1. Fetch Current Post
   const { data: post, error } = await supabase
     .from('posts')
     .select(`*, authors (name, role, is_ai)`)
@@ -76,7 +69,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   if (error || !post) notFound();
 
-  // 2. Fetch Similar Articles (Same Category, exclude current)
   const { data: similarPosts } = await supabase
     .from('posts')
     .select('title, slug, category, created_at')
@@ -84,7 +76,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     .neq('id', post.id)
     .limit(3);
 
-  // 3. Fetch "Read More" (Recent posts, exclude current)
   const { data: readMorePosts } = await supabase
     .from('posts')
     .select('title, slug, category')
@@ -94,13 +85,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   // @ts-ignore
   const author = Array.isArray(post.authors) ? post.authors[0] : post.authors;
-
-  // 1. Clean Markdown (Whitespace fix)
   let processedContent = cleanMarkdown(post.content);
-  
-  // 2. Process Inline Images (API Fetch)
   processedContent = await processInlineImages(processedContent);
-
   const readTime = calculateReadTime(post.content);
 
   return (
@@ -145,7 +131,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </div>
             </div>
 
-            {/* Nut Graph Box */}
             {post.nut_graph && (
               <div className="bg-[#E5E5E1]/50 border-l-4 border-[#2C3E50] p-6 mb-10 text-[#2C3E50] text-lg font-serif italic">
                 <span className="block text-xs font-bold uppercase not-italic text-[#64748B] mb-2">Why It Matters</span>
@@ -162,7 +147,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </figure>
             )}
 
-            {/* --- MARKDOWN RENDERER --- */}
             <div className="
               article-content font-serif text-[#2C3E50] text-lg leading-relaxed
               prose prose-lg max-w-none 
@@ -178,9 +162,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                 components={{
                   p: ({node, children, ...props}) => {
                     const hasImage = (node?.children[0] as any)?.tagName === 'img';
-                    if (hasImage) {
-                      return <>{children}</>;
-                    }
+                    if (hasImage) return <>{children}</>;
                     return <p className="mb-6" {...props}>{children}</p>;
                   },
                   img: ({node, ...props}) => (
@@ -197,12 +179,16 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </ReactMarkdown>
             </div>
 
+            <CommentsSection postId={post.id} />
+
           </article>
 
-          {/* Sidebar */}
           <aside className="lg:col-span-4 space-y-12 border-l border-[#2C3E50]/10 pl-0 lg:pl-12">
             
-            {/* Sidebar Content from AI */}
+            <NewsletterForm />
+            
+            <ShareBar title={post.title} slug={post.slug} />
+
             {post.sidebar_content && (
               <div className="bg-[#2C3E50] text-[#F5F5F1] p-8 rounded-sm shadow-lg">
                 <h3 className="font-serif font-bold text-xl mb-4 text-[#B7410E]">
@@ -218,13 +204,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </div>
             )}
 
-            {/* Ad Slot */}
             <div className="w-full aspect-[3/4] bg-[#E5E5E1] border border-dashed border-[#2C3E50]/30 flex flex-col items-center justify-center relative overflow-hidden group">
                <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
                <span className="text-xs font-mono text-[#64748B] uppercase tracking-widest z-10 mb-2">Advertisement</span>
             </div>
 
-            {/* Similar Articles */}
             {similarPosts && similarPosts.length > 0 && (
               <div>
                 <Link href={`/category/${post.category}`} className="font-bold text-[#2C3E50] uppercase tracking-wider text-xs mb-6 border-b border-[#2C3E50]/10 pb-2 block hover:text-[#B7410E] transition-colors">
@@ -245,7 +229,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </div>
             )}
 
-            {/* Read More */}
             {readMorePosts && readMorePosts.length > 0 && (
               <div>
                 <h4 className="font-bold text-[#2C3E50] uppercase tracking-wider text-xs mb-6 border-b border-[#2C3E50]/10 pb-2">

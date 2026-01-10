@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Search, ArrowRight, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ContextualSearch from '@/components/navigation/ContextualSearch';
+import NewsletterForm from '@/components/ui/NewsletterForm';
 
 export const revalidate = 60; // Revalidate page every 60 seconds
 
@@ -339,6 +340,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
             
             {/* Contextual Search */}
             <ContextualSearch />
+
+            {/* Newsletter */}
+            <NewsletterForm />
 
             {/* Categorized Article Lists (Dynamic) */}
             <div className="bg-[#E5E5E1]/30 p-4 border border-[#2C3E50]/5 rounded-sm">
