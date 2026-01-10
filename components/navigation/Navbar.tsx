@@ -1,4 +1,4 @@
-'use client'; // Must be client component for interactivity
+'use client'; 
 
 import Link from 'next/link';
 import { useState } from 'react';
@@ -6,6 +6,7 @@ import { Menu, X, Globe } from 'lucide-react';
 
 const languages = [
   { code: 'en', label: 'English' },
+  { code: 'hi', label: 'Hindi' }, 
   { code: 'es', label: 'Español' },
   { code: 'jp', label: '日本語' },
 ];
@@ -37,22 +38,30 @@ export default function Navbar() {
             
             <div className="h-6 w-px bg-[#2C3E50]/20"></div>
             
-            {/* Language Switcher */}
-            <div className="relative group">
-              <button className="flex items-center gap-2 text-[#2C3E50] hover:text-[#B7410E] transition-colors">
+            {/* Language Switcher - Fixed Hover Bridge */}
+            <div className="relative group h-12 flex items-center">
+              <button className="flex items-center gap-2 text-[#2C3E50] hover:text-[#B7410E] transition-colors py-2">
                 <Globe size={18} />
                 <span className="uppercase font-semibold text-sm">{currentLang}</span>
               </button>
-              <div className="absolute right-0 mt-2 w-32 bg-white border border-gray-200 shadow-lg rounded-sm overflow-hidden hidden group-hover:block">
-                {languages.map((l) => (
-                  <button
-                    key={l.code}
-                    onClick={() => setLang(l.code)}
-                    className="block w-full text-left px-4 py-2 text-sm text-[#2C3E50] hover:bg-[#B7410E] hover:text-white transition-colors"
-                  >
-                    {l.label}
-                  </button>
-                ))}
+              
+              {/* The Dropdown Bridge: 
+                 1. 'top-full' positions it right below the button area.
+                 2. 'pt-2' adds invisible padding so the mouse doesn't lose focus when moving down.
+                 3. The inner div contains the visual border/bg.
+              */}
+              <div className="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
+                <div className="bg-white border border-gray-200 shadow-lg rounded-sm overflow-hidden">
+                  {languages.map((l) => (
+                    <button
+                      key={l.code}
+                      onClick={() => setLang(l.code)}
+                      className="block w-full text-left px-4 py-2 text-sm text-[#2C3E50] hover:bg-[#B7410E] hover:text-white transition-colors"
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

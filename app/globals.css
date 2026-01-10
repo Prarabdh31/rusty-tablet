@@ -2,7 +2,7 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* THEME CONFIGURATION (Replaces tailwind.config.ts) */
+/* THEME CONFIGURATION */
 @theme {
   --color-rust: #B7410E;
   --color-charcoal: #2C3E50;
@@ -11,6 +11,14 @@
 
   --font-serif: var(--font-serif), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  
+  /* Marquee Animation - SLOWED DOWN from 30s to 120s for readability */
+  --animate-marquee: marquee 300s linear infinite;
+  
+  @keyframes marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-100%); }
+  }
 }
 
 /* CUSTOM UTILITIES */
@@ -21,6 +29,11 @@
   
   .pattern-cubes {
     background-image: url("https://www.transparenttextures.com/patterns/cubes.png");
+  }
+  
+  /* Utility to pause animation on hover */
+  .pause-on-hover:hover {
+    animation-play-state: paused;
   }
 }
 
@@ -40,4 +53,36 @@ body {
   width: 100%;
   height: 100%;
   z-index: 0;
+}
+
+/* --- FORCE TABLE STYLES --- */
+.article-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  border: 1px solid rgba(44, 62, 80, 0.2);
+  font-size: 0.95rem;
+}
+
+.article-content th {
+  background-color: var(--color-charcoal);
+  color: #F5F5F1;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px;
+  text-align: left;
+  border: 1px solid #2C3E50;
+}
+
+.article-content td {
+  padding: 12px;
+  border: 1px solid rgba(44, 62, 80, 0.2);
+  vertical-align: top;
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.article-content tr:nth-child(even) td {
+  background-color: rgba(44, 62, 80, 0.03);
 }
