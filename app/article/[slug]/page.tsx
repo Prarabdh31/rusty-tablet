@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Navbar from '@/components/navigation/Navbar';
 import Link from 'next/link';
-import { Share2, Bookmark, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cleanMarkdown } from '@/lib/utils';
@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import CommentsSection from '@/components/article/CommentsSection';
 import ShareBar from '@/components/article/ShareBar';
 import NewsletterForm from '@/components/ui/NewsletterForm';
+import ArticleActions from '@/components/article/ArticleActions';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,10 +126,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                    <div className="text-xs text-[#64748B] uppercase tracking-wide">{formatDate(post.created_at)}</div>
                  </div>
               </div>
-              <div className="flex items-center gap-4 text-[#2C3E50]">
-                 <button className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider hover:text-[#B7410E] transition-colors"><Share2 size={16} /> Share</button>
-                 <button className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider hover:text-[#B7410E] transition-colors"><Bookmark size={16} /> Save</button>
-              </div>
+              
+              {/* Replaced static buttons with functional client component */}
+              <ArticleActions postId={post.id} title={post.title} slug={post.slug} />
             </div>
 
             {post.nut_graph && (

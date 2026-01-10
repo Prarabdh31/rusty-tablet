@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import { Menu, X, Globe } from 'lucide-react';
+import { Menu, X, Globe, User, LogOut, Loader2, Check } from 'lucide-react';
+import { useAuth } from '@/components/providers/AuthProvider';
+import { createBrowserClient } from '@supabase/ssr';
 
 const languages = [
   { code: 'en', label: 'English' },
@@ -12,12 +14,19 @@ const languages = [
 ];
 
 export default function Navbar() {
+  const { user, signInWithGoogle, signOut, loading: authLoading } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [currentLang, setLang] = useState('en');
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   // Check current language on mount
   useEffect(() => {
-    // Read cookie to find current language
     const match = document.cookie.match(/(^|;) ?googtrans=([^;]*)(;|$)/);
     if (match) {
       const lang = match[2].split('/')[2]; 
@@ -26,15 +35,25 @@ export default function Navbar() {
   }, []);
 
   const handleLanguageChange = (langCode: string) => {
-    // 1. Set the cookie that Google Translate looks for
     document.cookie = `googtrans=/auto/${langCode}; path=/; domain=${window.location.hostname}`;
-    document.cookie = `googtrans=/auto/${langCode}; path=/;`; // Fallback for localhost
-
-    // 2. Update state
+    document.cookie = `googtrans=/auto/${langCode}; path=/;`;
     setLang(langCode);
-
-    // 3. Reload page to trigger translation
     window.location.reload();
+  };
+
+  const handleSubscribe = async () => {
+    if (!user) {
+      signInWithGoogle();
+      return;
+    }
+    setSubscribing(true);
+    // Simple subscribe logic for logged in user
+    const { error } = await supabase.from('subscribers').insert({ email: user.email });
+    if (!error || error.code === '23505') { // Success or already exists
+      setSubscribed(true);
+      setTimeout(() => setSubscribed(false), 3000);
+    }
+    setSubscribing(false);
   };
 
   return (
@@ -45,9 +64,8 @@ export default function Navbar() {
           {/* Logo */}
           <Link href="/" className="flex-shrink-0 flex items-center gap-3 group">
             <div className="w-10 h-10 bg-[#B7410E] flex items-center justify-center rounded-sm group-hover:bg-[#2C3E50] transition-colors">
-              <span className="text-[#F5F5F1] font-serif font-bold text-xl notranslate">R</span>
+              <span className="text-[#F5F5F1] font-serif font-bold text-xl">R</span>
             </div>
-            {/* Added 'notranslate' class here */}
             <span className="font-serif text-2xl font-bold text-[#2C3E50] tracking-tight notranslate">
               Rusty Tablet
             </span>
@@ -67,7 +85,6 @@ export default function Navbar() {
                 <Globe size={18} />
                 <span className="uppercase font-semibold text-sm">{currentLang === 'ja' ? 'JP' : currentLang}</span>
               </button>
-              
               <div className="absolute right-0 top-full pt-2 w-32 hidden group-hover:block z-50">
                 <div className="bg-white border border-gray-200 shadow-lg rounded-sm overflow-hidden">
                   {languages.map((l) => (
@@ -83,9 +100,56 @@ export default function Navbar() {
               </div>
             </div>
 
-            <button className="bg-[#2C3E50] text-[#F5F5F1] px-4 py-2 rounded-sm text-sm font-medium hover:bg-[#B7410E] transition-colors">
-              Subscribe
+            {/* Subscribe Button */}
+            <button 
+              onClick={handleSubscribe}
+              disabled={subscribing || subscribed}
+              className={`px-4 py-2 rounded-sm text-sm font-medium transition-all w-28 flex justify-center items-center ${
+                subscribed 
+                  ? 'bg-green-600 text-white' 
+                  : 'bg-[#2C3E50] text-[#F5F5F1] hover:bg-[#B7410E]'
+              }`}
+            >
+              {subscribing ? <Loader2 size={16} className="animate-spin" /> : subscribed ? <Check size={16} /> : 'Subscribe'}
             </button>
+
+            {/* Auth Profile Section */}
+            {authLoading ? (
+              <div className="w-8 h-8 rounded-full bg-[#2C3E50]/10 animate-pulse"></div>
+            ) : user ? (
+              <div className="relative group h-12 flex items-center">
+                <button className="flex items-center gap-2 focus:outline-none">
+                  {user.user_metadata?.avatar_url ? (
+                    <img src={user.user_metadata.avatar_url} alt="Profile" className="w-8 h-8 rounded-full border border-[#2C3E50]/20" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-[#2C3E50] text-white flex items-center justify-center font-bold text-xs">
+                      {user.email?.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+                
+                {/* User Dropdown */}
+                <div className="absolute right-0 top-full pt-2 w-48 hidden group-hover:block z-50">
+                  <div className="bg-white border border-gray-200 shadow-lg rounded-sm overflow-hidden">
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <p className="text-xs font-bold text-[#2C3E50] truncate">{user.user_metadata?.full_name || 'Reader'}</p>
+                      <p className="text-[10px] text-[#64748B] truncate">{user.email}</p>
+                    </div>
+                    <button onClick={() => signOut()} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
+                      <LogOut size={14} /> Sign Out
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button 
+                onClick={() => signInWithGoogle()}
+                className="flex items-center gap-2 text-sm font-bold text-[#2C3E50] hover:text-[#B7410E] transition-colors"
+              >
+                <User size={18} /> Login
+              </button>
+            )}
+
           </div>
 
           {/* Mobile Menu Button */}
@@ -104,17 +168,14 @@ export default function Navbar() {
             <Link href="/category/politics" className="block px-3 py-2 text-[#2C3E50] font-medium">Politics</Link>
             <Link href="/category/industry" className="block px-3 py-2 text-[#2C3E50] font-medium">Industry</Link>
             <div className="border-t border-[#2C3E50]/10 my-2"></div>
-            <div className="flex gap-4 px-3 py-2">
-              {languages.map((l) => (
-                <button 
-                  key={l.code} 
-                  onClick={() => { handleLanguageChange(l.code); setIsOpen(false); }}
-                  className={`text-sm font-bold ${currentLang === l.code ? 'text-[#B7410E]' : 'text-[#2C3E50]'}`}
-                >
-                  {l.code.toUpperCase()}
-                </button>
-              ))}
-            </div>
+            {!user ? (
+              <button onClick={() => signInWithGoogle()} className="block w-full text-left px-3 py-2 font-bold text-[#2C3E50]">Login</button>
+            ) : (
+              <>
+                <div className="px-3 py-2 text-sm text-[#64748B]">{user.email}</div>
+                <button onClick={() => signOut()} className="block w-full text-left px-3 py-2 font-bold text-red-600">Sign Out</button>
+              </>
+            )}
           </div>
         </div>
       )}
