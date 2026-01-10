@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cleanMarkdown } from '@/lib/utils';
 import { getUnsplashImage, getFallbackImage } from '@/lib/services/unsplash';
+import { formatDistanceToNow } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +16,24 @@ interface ArticlePageProps {
 }
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
+  const date = new Date(dateString);
+  const options: Intl.DateTimeFormatOptions = { 
+    month: 'long', 
+    day: 'numeric', 
+    year: 'numeric' 
+  };
+  
+  const formattedDate = date.toLocaleDateString('en-US', options);
+  const relativeTime = formatDistanceToNow(date, { addSuffix: true });
+
+  return `${formattedDate} (${relativeTime})`;
+};
+
+const calculateReadTime = (content: string) => {
+  if (!content) return '1 min read';
+  const words = content.trim().split(/\s+/).length;
+  const time = Math.ceil(words / 200);
+  return `${time} min read`;
 };
 
 // Helper: Replace [IMAGE: query] with actual image URLs
@@ -87,6 +101,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   // 2. Process Inline Images (API Fetch)
   processedContent = await processInlineImages(processedContent);
 
+  const readTime = calculateReadTime(post.content);
+
   return (
     <main className="min-h-screen bg-[#F5F5F1] font-sans selection:bg-[#B7410E] selection:text-white pb-24">
       <Navbar />
@@ -96,9 +112,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           
           <article className="lg:col-span-8">
             <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-[#B7410E] mb-6">
-              <span className="cursor-pointer hover:underline">Home</span>
+              <Link href="/" className="cursor-pointer hover:underline">Home</Link>
               <span className="text-[#2C3E50]/20">/</span>
-              <span className="cursor-pointer hover:underline">{post.category || 'Dispatches'}</span>
+              <Link href={`/category/${post.category || 'General'}`} className="cursor-pointer hover:underline">
+                {post.category || 'Dispatches'}
+              </Link>
+              <span className="text-[#2C3E50]/20">•</span>
+              <span className="text-[#64748B]">{readTime}</span>
             </div>
 
             <h1 className="font-serif text-3xl md:text-5xl font-bold text-[#2C3E50] leading-[1.1] mb-6 text-left">
@@ -125,7 +145,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </div>
             </div>
 
-            {/* Nut Graph Box - Moved Here */}
+            {/* Nut Graph Box */}
             {post.nut_graph && (
               <div className="bg-[#E5E5E1]/50 border-l-4 border-[#2C3E50] p-6 mb-10 text-[#2C3E50] text-lg font-serif italic">
                 <span className="block text-xs font-bold uppercase not-italic text-[#64748B] mb-2">Why It Matters</span>
@@ -156,16 +176,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               <ReactMarkdown 
                 remarkPlugins={[remarkGfm]}
                 components={{
-                  // Prevent wrapping images in paragraphs
                   p: ({node, children, ...props}) => {
-                    // Check if the only child is an image
                     const hasImage = (node?.children[0] as any)?.tagName === 'img';
                     if (hasImage) {
                       return <>{children}</>;
                     }
                     return <p className="mb-6" {...props}>{children}</p>;
                   },
-                  // Allow images to be full width
                   img: ({node, ...props}) => (
                     <figure className="my-10 block">
                        <div className="border border-[#2C3E50]/10 rounded-sm overflow-hidden">
@@ -210,9 +227,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             {/* Similar Articles */}
             {similarPosts && similarPosts.length > 0 && (
               <div>
-                <h4 className="font-bold text-[#2C3E50] uppercase tracking-wider text-xs mb-6 border-b border-[#2C3E50]/10 pb-2">
+                <Link href={`/category/${post.category}`} className="font-bold text-[#2C3E50] uppercase tracking-wider text-xs mb-6 border-b border-[#2C3E50]/10 pb-2 block hover:text-[#B7410E] transition-colors">
                   Related to {post.category}
-                </h4>
+                </Link>
                 <div className="flex flex-col gap-6">
                   {similarPosts.map((similarPost) => (
                     <Link key={similarPost.slug} href={`/article/${similarPost.slug}`} className="group block">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Merriweather, Inter } from "next/font/google";
 import "./globals.css";
+import TranslationEngine from "@/components/TranslationEngine";
 
 const merriweather = Merriweather({ 
   subsets: ["latin"],
@@ -28,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${merriweather.variable} ${inter.variable} font-sans min-h-screen relative`}>
-        {/* The noise texture overlay */}
+        <TranslationEngine />
         <div className="paper-texture" />
         <div className="relative z-10">
           {children}

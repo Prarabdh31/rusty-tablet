@@ -12,8 +12,7 @@
   --font-serif: var(--font-serif), ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   
-  /* Marquee Animation - SLOWED DOWN from 30s to 120s for readability */
-  --animate-marquee: marquee 300s linear infinite;
+  --animate-marquee: marquee 400s linear infinite;
   
   @keyframes marquee {
     0% { transform: translateX(0%); }
@@ -31,7 +30,6 @@
     background-image: url("https://www.transparenttextures.com/patterns/cubes.png");
   }
   
-  /* Utility to pause animation on hover */
   .pause-on-hover:hover {
     animation-play-state: paused;
   }
@@ -41,6 +39,9 @@
 body {
   background-color: var(--color-paper);
   color: var(--color-charcoal);
+  /* Fix for Google Translate shifting body - Force top to 0 */
+  top: 0px !important; 
+  position: relative;
 }
 
 /* TEXTURE OVERLAY */
@@ -55,7 +56,7 @@ body {
   z-index: 0;
 }
 
-/* --- FORCE TABLE STYLES --- */
+/* FORCE TABLE STYLES */
 .article-content table {
   width: 100%;
   border-collapse: collapse;
@@ -85,4 +86,39 @@ body {
 
 .article-content tr:nth-child(even) td {
   background-color: rgba(44, 62, 80, 0.03);
+}
+
+/* --- GOOGLE TRANSLATE OVERRIDES --- */
+/* Completely hide the top frame */
+.goog-te-banner-frame.skiptranslate {
+    display: none !important;
+} 
+body {
+    top: 0px !important; 
+}
+/* Hide the branding widget */
+.goog-te-gadget {
+  font-size: 0 !important;
+  visibility: hidden;
+}
+.goog-te-gadget span {
+  display: none !important;
+}
+.goog-te-gadget .goog-te-combo {
+  display: none !important;
+}
+/* Hide tooltips */
+.goog-tooltip {
+  display: none !important;
+}
+.goog-tooltip:hover {
+  display: none !important;
+}
+.goog-text-highlight {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+/* Ensure the widget container doesn't take space */
+#google_translate_element {
+  display: none !important;
 }
