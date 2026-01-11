@@ -154,7 +154,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
             {/* CHART WIDGET */}
             {post.chart_data && <ChartWidget chart={post.chart_data} />}
 
-            {/* FEATURED IMAGE with HOVER CAPTION */}
+            {/* FEATURED IMAGE with HOVER CAPTION (Desktop) & STATIC CAPTION (Mobile) */}
             {post.featured_image && (
               <figure className="mb-12 relative group block">
                 <div className="relative overflow-hidden rounded-sm border border-[#2C3E50]/10">
@@ -163,18 +163,19 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                     alt={post.title} 
                     className="w-full h-auto object-cover"
                   />
-                  {/* Overlay Info Icon */}
-                  <div className="absolute bottom-3 right-3 z-10">
-                     <div className="bg-[#2C3E50]/80 backdrop-blur-sm text-white p-2 rounded-full cursor-help hover:bg-[#B7410E] transition-colors shadow-sm">
-                       <Camera size={16} />
-                     </div>
-                  </div>
-                  {/* Hover Caption Panel */}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 pt-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end text-white pointer-events-none group-hover:pointer-events-auto">
+                  
+                  {/* Desktop Hover Caption Panel */}
+                  <div className="hidden md:flex absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 pt-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex-col justify-end text-white pointer-events-none group-hover:pointer-events-auto">
                     <p className="font-serif text-lg leading-snug mb-1 text-shadow-sm">{featuredCaption}</p>
                     <p className="text-xs font-bold uppercase tracking-widest text-[#B7410E] flex items-center gap-2">
                        <span className="w-1 h-1 bg-[#B7410E] rounded-full"></span> {featuredCredit}
                     </p>
+                  </div>
+
+                  {/* Mobile Caption Block (Always Visible) */}
+                  <div className="md:hidden bg-[#2C3E50] text-white p-4">
+                     <p className="font-serif text-sm leading-snug mb-1">{featuredCaption}</p>
+                     <p className="text-[10px] font-bold uppercase tracking-widest text-[#B7410E]">{featuredCredit}</p>
                   </div>
                 </div>
               </figure>
@@ -204,22 +205,26 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                     const [caption, credit] = metaString.includes('|') ? metaString.split('|') : [metaString, ''];
 
                     return (
-                      <figure className="my-10 block relative group">
-                         <div className="border border-[#2C3E50]/10 rounded-sm overflow-hidden relative">
-                          <img {...props} title={undefined} className="w-full h-auto m-0" />
-                          
-                          {/* Inline Image Overlay */}
-                          <div className="absolute bottom-2 right-2 z-10">
-                             <div className="bg-white/90 text-[#2C3E50] p-1.5 rounded-sm shadow-sm cursor-help hover:bg-[#B7410E] hover:text-white transition-colors">
-                               <Info size={14} />
-                             </div>
-                          </div>
-
-                          {/* Inline Image Hover Panel */}
-                          <div className="absolute inset-x-0 bottom-0 bg-[#2C3E50]/95 text-white p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
-                            {caption && <p className="font-sans text-sm mb-1 leading-snug">{caption.trim()}</p>}
-                            {credit && <p className="text-[10px] uppercase tracking-wider text-[#B7410E] font-bold">{credit.trim()}</p>}
-                          </div>
+                      <figure className="my-10 block">
+                         <div className="border border-[#2C3E50]/10 rounded-sm overflow-hidden bg-white shadow-sm">
+                          <img {...props} title={undefined} className="w-full h-auto m-0 block" />
+                          <figcaption className="p-4 border-t border-[#2C3E50]/5 bg-[#F9F9F7]">
+                            <div className="flex flex-col gap-1">
+                                {caption && (
+                                  <span className="font-serif text-sm text-[#2C3E50] leading-snug md:block hidden">
+                                    {caption.trim()}
+                                  </span>
+                                )}
+                                {credit && (
+                                  <div className="flex items-center gap-2">
+                                    <Camera size={12} className="text-[#B7410E]" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748B]">
+                                      {credit.trim()}
+                                    </span>
+                                  </div>
+                                )}
+                            </div>
+                          </figcaption>
                          </div>
                       </figure>
                     );
