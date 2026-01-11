@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Navbar from '@/components/navigation/Navbar';
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { Share2, Bookmark, ArrowRight, Info, Camera } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cleanMarkdown } from '@/lib/utils';
@@ -12,6 +12,7 @@ import CommentsSection from '@/components/article/CommentsSection';
 import ShareBar from '@/components/article/ShareBar';
 import NewsletterForm from '@/components/ui/NewsletterForm';
 import ArticleActions from '@/components/article/ArticleActions';
+import ChartWidget from '@/components/article/ChartWidget';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +54,8 @@ async function processInlineImages(content: string) {
     })
   );
   replacements.forEach(({ match, url, alt }) => {
-    newContent = newContent.replace(match, `\n\n![${alt}](${url})\n\n`);
+    // We pass the caption/credit in the title attribute for ReactMarkdown to pick up
+    newContent = newContent.replace(match, `\n\n![${alt}](${url} "${alt} | Photo via Unsplash")\n\n`);
   });
   return newContent;
 }
@@ -64,7 +66,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   const { data: post, error } = await supabase
     .from('posts')
-    .select(`*, authors (name, role, is_ai)`)
+    .select(`
+      *, 
+      authors (name, role, is_ai),
+      article_images (
+        public_url, caption, credit, usage_type, source
+      )
+    `)
     .eq('slug', slug)
     .single();
 
@@ -90,15 +98,21 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   processedContent = await processInlineImages(processedContent);
   const readTime = calculateReadTime(post.content);
 
+  // Find Featured Image Metadata
+  // @ts-ignore
+  const featuredImageMeta = post.article_images?.find((img: any) => img.usage_type === 'FEATURED');
+  const featuredCaption = featuredImageMeta?.caption || post.title;
+  const featuredCredit = featuredImageMeta?.credit || (post.featured_image?.includes('unsplash') ? 'Photo via Unsplash' : 'Visualization via Rusty Tablet Engine');
+
   return (
     <main className="min-h-screen bg-[#F5F5F1] font-sans selection:bg-[#B7410E] selection:text-white pb-24">
       <Navbar />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           
           <article className="lg:col-span-8">
-            <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-[#B7410E] mb-4 md:mb-6 flex-wrap">
+            <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-widest text-[#B7410E] mb-6">
               <Link href="/" className="cursor-pointer hover:underline">Home</Link>
               <span className="text-[#2C3E50]/20">/</span>
               <Link href={`/category/${post.category || 'General'}`} className="cursor-pointer hover:underline">
@@ -108,11 +122,11 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               <span className="text-[#64748B]">{readTime}</span>
             </div>
 
-            <h1 className="font-serif text-2xl md:text-5xl font-bold text-[#2C3E50] leading-tight md:leading-[1.1] mb-4 md:mb-6 text-left">
+            <h1 className="font-serif text-2xl md:text-5xl font-bold text-[#2C3E50] leading-tight md:leading-[1.1] mb-6 text-left">
               {post.title}
             </h1>
 
-            <p className="text-lg md:text-xl text-[#64748B] font-serif leading-relaxed italic mb-8 border-l-2 border-[#B7410E] pl-4 text-left">
+            <p className="text-xl text-[#64748B] font-serif leading-relaxed italic mb-8 border-l-2 border-[#B7410E] pl-4 text-left">
               {post.excerpt}
             </p>
 
@@ -127,23 +141,42 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                  </div>
               </div>
               
-              {/* Replaced static buttons with functional client component */}
               <ArticleActions postId={post.id} title={post.title} slug={post.slug} />
             </div>
 
             {post.nut_graph && (
-              <div className="bg-[#E5E5E1]/50 border-l-4 border-[#2C3E50] p-4 md:p-6 mb-10 text-[#2C3E50] text-base md:text-lg font-serif italic">
+              <div className="bg-[#E5E5E1]/50 border-l-4 border-[#2C3E50] p-6 mb-10 text-[#2C3E50] text-lg font-serif italic">
                 <span className="block text-xs font-bold uppercase not-italic text-[#64748B] mb-2">Why It Matters</span>
                 {post.nut_graph}
               </div>
             )}
 
+            {/* CHART WIDGET */}
+            {post.chart_data && <ChartWidget chart={post.chart_data} />}
+
+            {/* FEATURED IMAGE with HOVER CAPTION */}
             {post.featured_image && (
-              <figure className="mb-10">
-                <img src={post.featured_image} alt={post.title} className="w-full h-auto rounded-sm border border-[#2C3E50]/10" />
-                <figcaption className="text-xs text-[#64748B] mt-2 italic text-right">
-                  {post.featured_image.includes('unsplash') ? 'Photo via Unsplash' : 'Visualization via Rusty Tablet Engine'}
-                </figcaption>
+              <figure className="mb-12 relative group block">
+                <div className="relative overflow-hidden rounded-sm border border-[#2C3E50]/10">
+                  <img 
+                    src={post.featured_image} 
+                    alt={post.title} 
+                    className="w-full h-auto object-cover"
+                  />
+                  {/* Overlay Info Icon */}
+                  <div className="absolute bottom-3 right-3 z-10">
+                     <div className="bg-[#2C3E50]/80 backdrop-blur-sm text-white p-2 rounded-full cursor-help hover:bg-[#B7410E] transition-colors shadow-sm">
+                       <Camera size={16} />
+                     </div>
+                  </div>
+                  {/* Hover Caption Panel */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/70 to-transparent p-6 pt-12 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end text-white pointer-events-none group-hover:pointer-events-auto">
+                    <p className="font-serif text-lg leading-snug mb-1 text-shadow-sm">{featuredCaption}</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-[#B7410E] flex items-center gap-2">
+                       <span className="w-1 h-1 bg-[#B7410E] rounded-full"></span> {featuredCredit}
+                    </p>
+                  </div>
+                </div>
               </figure>
             )}
 
@@ -165,14 +198,32 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                     if (hasImage) return <>{children}</>;
                     return <p className="mb-6" {...props}>{children}</p>;
                   },
-                  img: ({node, ...props}) => (
-                    <figure className="my-10 block">
-                       <div className="border border-[#2C3E50]/10 rounded-sm overflow-hidden">
-                        <img {...props} className="w-full h-auto m-0" />
-                       </div>
-                       {props.alt && <figcaption className="text-xs text-[#64748B] mt-2 text-center italic uppercase tracking-wider">{props.alt}</figcaption>}
-                    </figure>
-                  )
+                  img: ({node, ...props}) => {
+                    // Metadata from title attribute
+                    const metaString = props.title || props.alt || '';
+                    const [caption, credit] = metaString.includes('|') ? metaString.split('|') : [metaString, ''];
+
+                    return (
+                      <figure className="my-10 block relative group">
+                         <div className="border border-[#2C3E50]/10 rounded-sm overflow-hidden relative">
+                          <img {...props} title={undefined} className="w-full h-auto m-0" />
+                          
+                          {/* Inline Image Overlay */}
+                          <div className="absolute bottom-2 right-2 z-10">
+                             <div className="bg-white/90 text-[#2C3E50] p-1.5 rounded-sm shadow-sm cursor-help hover:bg-[#B7410E] hover:text-white transition-colors">
+                               <Info size={14} />
+                             </div>
+                          </div>
+
+                          {/* Inline Image Hover Panel */}
+                          <div className="absolute inset-x-0 bottom-0 bg-[#2C3E50]/95 text-white p-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+                            {caption && <p className="font-sans text-sm mb-1 leading-snug">{caption.trim()}</p>}
+                            {credit && <p className="text-[10px] uppercase tracking-wider text-[#B7410E] font-bold">{credit.trim()}</p>}
+                          </div>
+                         </div>
+                      </figure>
+                    );
+                  }
                 }}
               >
                 {processedContent}
@@ -183,7 +234,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
           </article>
 
-          <aside className="lg:col-span-4 space-y-12 border-l-0 lg:border-l border-[#2C3E50]/10 pl-0 lg:pl-12 pt-8 lg:pt-0 border-t lg:border-t-0">
+          <aside className="lg:col-span-4 space-y-12 border-l border-[#2C3E50]/10 pl-0 lg:pl-12">
             
             <NewsletterForm />
             

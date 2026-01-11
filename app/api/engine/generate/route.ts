@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { fetchRSSFeed } from '@/lib/services/rss';
-import { getUnsplashImage, getFallbackImage } from '@/lib/services/unsplash';
+import { fetchRSSFeed, RSSItem } from '@/lib/services/rss';
 import { fetchNewsContext } from '@/lib/services/newsapi';
+import { generateImagenBuffer } from '@/lib/services/imagen';
+import { getUnsplashImageBuffer } from '@/lib/services/unsplash';
+import { uploadImageToStorage } from '@/lib/services/storage';
 
 // --- CONFIGURATION ---
-// User requested keeping 2.5-flash. 
-// Note: If 2.5 is unstable/unavailable in your tier, consider falling back to "gemini-1.5-flash"
 const GEMINI_TEXT_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 // --- TYPES ---
@@ -15,7 +15,6 @@ type Mode = 'SPECIFIC_RSS' | 'MANUAL' | 'NEWS_API_AI';
 interface RequestBody {
   mode: Mode;
   config: {
-    // Data Source Params
     rss_url?: string;
     content_input?: string; 
     topic_search?: string; 
@@ -25,19 +24,38 @@ interface RequestBody {
     news_category?: string;
     news_topic?: string;
 
-    // Identity & Tone Params
     target_region?: string;        
     article_sentiment?: string;    
     complexity?: 'EASY' | 'GENERAL' | 'TECHNICAL'; 
     
-    // Structure Params
     word_count?: number; 
     layout_instructions?: string; 
     
-    // Tabloid Features (Toggles)
     include_sidebar?: boolean;     
     generate_social?: boolean;     
   };
+}
+
+interface VisualPlanItem {
+  id: string; // "VISUAL_1", "VISUAL_2", or "FEATURED"
+  type: 'FEATURED' | 'INLINE';
+  prompt: string; // Detailed prompt for Imagen
+  search_keyword: string; // Backup keyword for Unsplash
+  caption: string;
+  style: 'PHOTOREALISTIC' | 'ILLUSTRATION' | 'INFOGRAPHIC';
+}
+
+// --- HELPER: FETCH EXTERNAL IMAGE BUFFER ---
+async function fetchExternalImageBuffer(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  } catch (e) {
+    console.error("Failed to fetch external image:", url, e);
+    return null;
+  }
 }
 
 // --- HELPER: GEMINI TEXT GENERATION ---
@@ -54,7 +72,6 @@ async function generateArticleText(
   const sentiment = config.article_sentiment || 'Objective';
   const complexity = config.complexity || 'GENERAL';
 
-  // Layout Logic
   const defaultLayout = `
     - Start with a "Nut Graph" (Why this matters).
     - Use a "Key Takeaways" bullet list.
@@ -74,17 +91,15 @@ async function generateArticleText(
     - Region/Persona: ${region}
     - Word Count: ~${wordCount} words
     - Sentiment: ${sentiment}
-    - Reading Level: ${complexity} (EASY = Grade 8, GENERAL = NYT Style, TECHNICAL = Academic)
+    - Reading Level: ${complexity}
     
-    MANDATORY INSTRUCTIONS (THE TABLOID METHOD):
-    1. **Persona:** Create a fictional Author Name & Role based on the Region.
-    2. **Headlines:** Generate a main headline that is catchy/viral but accurate (Easily understandable English). Also generate 3 alternative headlines.
-    3. **Nut Graph:** Explicitly write a "Why it matters" paragraph explaining the impact of this story.
-    4. **Public Sentiment:** Synthesize a realistic "Public Reaction" or Quote based on typical discourse on this topic.
-    5. **Sidebar:** Create a "Fast Facts" or "Timeline" sidebar box content.
-    6. **SEO/Social:** Write a Google Meta Description and a Viral Tweet.
-    7. **Visuals:** - **Inline Images:** Insert exactly 2 placeholders in the markdown body where an image would be relevant. Format: [IMAGE: keyword for unsplash search].
-       - **Data Chart:** Analyze the context. If numerical data exists, generate a JSON object for a chart. If no data, return null.
+    INSTRUCTIONS:
+    1. **Visual Director Mode:** You must plan the visual assets. 
+       - Always include 1 "FEATURED" image.
+       - Include 1-2 "INLINE" images where relevant in the body.
+       - Insert placeholders like [VISUAL_1], [VISUAL_2] in the markdown content where inline images should appear.
+    2. **Writing:** Write the article following the "Rusty Tablet" industrial/analytical tone.
+    3. **Metadata:** Generate headlines, nut graph, sidebar, and social posts.
     
     LAYOUT INSTRUCTIONS:
     ${layout}
@@ -95,26 +110,38 @@ async function generateArticleText(
     {
       "author_name": "String",
       "author_role": "String",
-      "title": "String (Main Headline)",
+      "title": "String",
       "alt_headlines": ["String", "String", "String"],
       "slug": "kebab-case-string",
-      "category": "String (Single Word Only, No slashes)",
+      "category": "String (Single Word)",
       "excerpt": "String (2 sentences)",
-      "nut_graph": "String (Why it matters)",
-      "content": "Markdown String (The main article body with [IMAGE: keyword] placeholders)",
-      "sidebar_content": {
-        "title": "String",
-        "items": ["String"]
-      },
+      "nut_graph": "String",
+      "content": "Markdown String (With [VISUAL_1] placeholders)",
+      "sidebar_content": { "title": "String", "items": ["String"] },
       "meta_description": "String",
       "social_text": "String",
-      "image_keywords": "String (Unsplash search query)",
+      "visual_plan": [
+        {
+          "id": "FEATURED",
+          "type": "FEATURED",
+          "prompt": "Detailed prompt for AI image generator (Cinematic, Industrial)",
+          "search_keyword": "2-3 word query for Unsplash fallback",
+          "caption": "Journalistic caption",
+          "style": "PHOTOREALISTIC" 
+        },
+        {
+          "id": "VISUAL_1",
+          "type": "INLINE",
+          "prompt": "Detailed prompt for AI image generator",
+          "search_keyword": "Fallback query",
+          "caption": "Journalistic caption",
+          "style": "PHOTOREALISTIC"
+        }
+      ],
       "chart_data": {
         "type": "BAR" | "PIE" | "LINE",
         "title": "String",
-        "data": [
-          { "label": "String", "value": Number }
-        ]
+        "data": [ { "label": "String", "value": Number } ]
       } | null
     }
   `;
@@ -126,7 +153,6 @@ async function generateArticleText(
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: "application/json" },
-        // SAFETY SETTINGS: Important to prevent blocking news content
         safetySettings: [
           { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
           { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
@@ -136,35 +162,16 @@ async function generateArticleText(
       })
     });
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Gemini API Error (${response.status}):`, errorText);
-        throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
-    }
-
+    if (!response.ok) throw new Error(`Gemini API Error: ${response.status}`);
     const data = await response.json();
-    
-    // Check for safety blocks or errors
-    if (data.promptFeedback?.blockReason) {
-        console.warn(`Gemini Blocked: ${data.promptFeedback.blockReason}`);
-        throw new Error(`Content Blocked: ${data.promptFeedback.blockReason}`);
-    }
-
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!rawText) {
-        console.error("Gemini Response Missing Candidates:", JSON.stringify(data, null, 2));
-        // Retry logic
-        if (retryCount < 1) {
-            console.warn("Gemini produced no text. Retrying...");
-            return generateArticleText(context, config, retryCount + 1);
-        }
-        throw new Error("Gemini produced no text (Candidate missing)");
+        if (retryCount < 1) return generateArticleText(context, config, retryCount + 1);
+        throw new Error("Gemini produced no text");
     }
 
-    const cleanedJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    return JSON.parse(cleanedJson);
+    return JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
   } catch (error: any) {
     console.error("Gemini Generation Failed:", error);
     throw new Error(`Failed to generate article: ${error.message}`);
@@ -184,7 +191,7 @@ export async function POST(req: NextRequest) {
     
     let contextData = "";
     let sourceUrl = "";
-    let providedImage = null; // Store image from NewsAPI if available
+    let newsApiImage: string | null = null;
 
     // 1. DATA INGESTION
     if (mode === 'MANUAL') {
@@ -194,16 +201,12 @@ export async function POST(req: NextRequest) {
     } 
     else if (mode === 'SPECIFIC_RSS') {
       if (!config.rss_url) throw new Error("RSS URL required");
-      
       let items = await fetchRSSFeed(config.rss_url, 15);
-      
       if (config.topic_search) {
         const term = config.topic_search.toLowerCase();
         items = items.filter(i => i.title.toLowerCase().includes(term) || i.contentSnippet?.toLowerCase().includes(term));
       }
-
-      if (items.length === 0) throw new Error("No RSS items found matching criteria");
-      
+      if (items.length === 0) throw new Error("No RSS items found");
       const randomItem = items[Math.floor(Math.random() * items.length)];
       contextData = `Headline: ${randomItem.title}. Snippet: ${randomItem.contentSnippet}`;
       sourceUrl = randomItem.link;
@@ -215,13 +218,10 @@ export async function POST(req: NextRequest) {
         category: config.news_category,
         topic: config.news_topic
       });
-
       if (!newsResult) throw new Error("NewsAPI failed to find articles.");
-
       contextData = `Headline: ${newsResult.title}\n\nBody:\n${newsResult.body}`;
       sourceUrl = newsResult.url;
-      // Capture the source image if available
-      if (newsResult.image) providedImage = newsResult.image;
+      if (newsResult.image) newsApiImage = newsResult.image;
     }
     else {
       throw new Error("Invalid Mode selected");
@@ -230,25 +230,90 @@ export async function POST(req: NextRequest) {
     // 2. GENERATION
     const articleData = await generateArticleText(contextData, config);
 
-    // 3. VISUALS
-    let featuredImage: string | null = null;
-    
-    // Priority 1: NewsAPI Source Image (Highest Relevance)
-    if (providedImage) {
-        console.log("Using NewsAPI Source Image for Featured Image.");
-        featuredImage = providedImage;
-    }
-    
-    // Priority 2: Unsplash (Based on AI Keywords) - Only if no provided image exists
-    if (!featuredImage && articleData.image_keywords) {
-        console.log(`Searching Unsplash for: ${articleData.image_keywords}`);
-        featuredImage = await getUnsplashImage(articleData.image_keywords);
-    }
+    // 3. ASSET PIPELINE (The "Visual Director" Execution)
+    const visualPlan = articleData.visual_plan || [];
+    let finalContent = articleData.content;
+    let featuredImageUrl: string | null = null;
+    const processedImages: any[] = [];
 
-    // Priority 3: Static Fallback
-    if (!featuredImage) {
-        console.warn("Visuals failed, using static fallback.");
-        featuredImage = getFallbackImage();
+    // Helper to upload and record image
+    const saveImageAsset = async (buffer: Buffer, filename: string, meta: any) => {
+       const upload = await uploadImageToStorage(buffer, filename);
+       if (upload) {
+          processedImages.push({ ...meta, public_url: upload.publicUrl, storage_path: upload.path });
+          return upload.publicUrl;
+       }
+       return null;
+    };
+
+    // Iterate through visual plan
+    for (const item of visualPlan) {
+      try {
+        let buffer: Buffer | null = null;
+        let source = '';
+        let credit = '';
+
+        // Strategy A: Use NewsAPI Image (Only for Featured)
+        if (item.type === 'FEATURED' && newsApiImage) {
+          console.log(`[Asset] Using NewsAPI Source Image for Featured`);
+          const newsBuffer = await fetchExternalImageBuffer(newsApiImage);
+          if (newsBuffer) {
+             buffer = newsBuffer;
+             source = 'NEWS_SOURCE';
+             credit = 'Source Media via NewsAPI';
+          }
+        }
+
+        // Strategy B: Gemini Imagen (If no buffer yet)
+        if (!buffer) {
+           console.log(`[Asset] Generating with Imagen: ${item.prompt.substring(0, 30)}...`);
+           buffer = await generateImagenBuffer(item.prompt);
+           if (buffer) {
+             source = 'GEMINI_IMAGEN';
+             credit = 'Illustration by Rusty Tablet AI';
+           }
+        }
+
+        // Strategy C: Unsplash Fallback (If no buffer yet)
+        if (!buffer && item.search_keyword) {
+           console.log(`[Asset] Fallback to Unsplash: ${item.search_keyword}`);
+           const unsplashData = await getUnsplashImageBuffer(item.search_keyword);
+           if (unsplashData) {
+             buffer = Buffer.from(unsplashData.buffer); // Ensure Buffer type
+             source = 'UNSPLASH';
+             credit = unsplashData.credit;
+           }
+        }
+
+        // Upload & Record
+        if (buffer) {
+          const filename = `${item.id.toLowerCase()}_${Date.now()}.png`;
+          const publicUrl = await saveImageAsset(buffer, filename, {
+             alt_text: item.prompt,
+             caption: item.caption,
+             source,
+             credit,
+             usage_type: item.type
+          });
+
+          if (publicUrl) {
+            if (item.type === 'FEATURED') {
+              featuredImageUrl = publicUrl;
+            } else {
+              // Replace placeholder in text: [VISUAL_1] -> ![Alt](Url)
+              const markdownImage = `\n\n![${item.caption}](${publicUrl} "${item.caption} | ${credit}")\n\n`;
+              finalContent = finalContent.replace(`[${item.id}]`, markdownImage);
+            }
+          }
+        } else {
+          // If all failed, remove placeholder cleanly
+          finalContent = finalContent.replace(`[${item.id}]`, '');
+        }
+
+      } catch (err) {
+        console.error(`Failed to process visual item ${item.id}:`, err);
+        finalContent = finalContent.replace(`[${item.id}]`, ''); // Cleanup on error
+      }
     }
 
     // 4. DATABASE SAVING
@@ -257,38 +322,30 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    // Author
     const generatedAuthorName = articleData.author_name || 'Rusty Tablet Staff';
-    const generatedAuthorRole = articleData.author_role || 'Contributor';
-    
     let authorId;
-    const { data: existingAuthor } = await supabaseAdmin
-      .from('authors')
-      .select('id')
-      .eq('name', generatedAuthorName)
-      .single();
+    const { data: existingAuthor } = await supabaseAdmin.from('authors').select('id').eq('name', generatedAuthorName).single();
     
-    if (existingAuthor) {
-      authorId = existingAuthor.id;
-    } else {
+    if (existingAuthor) authorId = existingAuthor.id;
+    else {
       const { data: newAuthor } = await supabaseAdmin.from('authors').insert({
-        name: generatedAuthorName, 
-        role: generatedAuthorRole, 
-        is_ai: true,
-        bio: `Reporting from ${config.target_region || 'Global'}.`
+        name: generatedAuthorName, role: articleData.author_role, is_ai: true, bio: `Reporting from ${config.target_region}.`
       }).select().single();
       authorId = newAuthor?.id;
     }
 
+    // Save Post
     const { data: post, error: dbError } = await supabaseAdmin.from('posts').insert({
       title: articleData.title,
       slug: articleData.slug + '-' + Date.now().toString().slice(-4),
       excerpt: articleData.excerpt,
-      content: articleData.content,
+      content: finalContent, // Now contains real image URLs
       author_id: authorId,
       is_published: true,
       category: articleData.category || 'Dispatches', 
       language: 'en',
-      featured_image: featuredImage,
+      featured_image: featuredImageUrl, // The uploaded URL
       source_url: sourceUrl,
       generation_mode: mode,
       nut_graph: articleData.nut_graph,
@@ -301,16 +358,26 @@ export async function POST(req: NextRequest) {
 
     if (dbError) throw dbError;
 
+    // Save Image Metadata (Bulk insert)
+    if (processedImages.length > 0 && post) {
+      const imageRecords = processedImages.map(img => ({
+        post_id: post.id,
+        storage_path: img.storage_path,
+        public_url: img.public_url,
+        alt_text: img.alt_text,
+        caption: img.caption,
+        source: img.source,
+        credit: img.credit,
+        usage_type: img.usage_type
+      }));
+      await supabaseAdmin.from('article_images').insert(imageRecords);
+    }
+
     return NextResponse.json({ 
       success: true, 
       post_id: post.id, 
       title: post.title, 
-      author: generatedAuthorName,
-      category: articleData.category,
-      tabloid_features: {
-        has_sidebar: !!articleData.sidebar_content,
-        has_social: !!articleData.social_text
-      }
+      images_processed: processedImages.length
     });
 
   } catch (error: any) {
