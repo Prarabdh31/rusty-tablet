@@ -9,18 +9,10 @@ export default function AdSenseScript() {
 
   return (
     <Script
-      id="adsbygoogle-init"
-      strategy="afterInteractive"
+      async
       src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
       crossOrigin="anonymous"
-      // Added prompt for Auto Ads verification
-      onLoad={() => {
-        if (typeof window !== 'undefined') {
-            // Usually not needed if the script tag is present with the client ID,
-            // but confirms execution.
-            console.log('AdSense Script Loaded');
-        }
-      }}
+      strategy="afterInteractive"
     />
   );
 }
