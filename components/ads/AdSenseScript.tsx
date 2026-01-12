@@ -1,5 +1,3 @@
-'use client';
-
 import Script from 'next/script';
 
 export default function AdSenseScript() {
@@ -9,6 +7,7 @@ export default function AdSenseScript() {
 
   return (
     <Script
+      id="adsense-init"
       async
       src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
       crossOrigin="anonymous"
