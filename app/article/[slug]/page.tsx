@@ -13,6 +13,7 @@ import ShareBar from '@/components/article/ShareBar';
 import NewsletterForm from '@/components/ui/NewsletterForm';
 import ArticleActions from '@/components/article/ArticleActions';
 import ChartWidget from '@/components/article/ChartWidget';
+import AdUnit from '@/components/ads/AdUnit';
 
 export const dynamic = 'force-dynamic';
 
@@ -260,10 +261,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               </div>
             )}
 
-            <div className="w-full aspect-[3/4] bg-[#E5E5E1] border border-dashed border-[#2C3E50]/30 flex flex-col items-center justify-center relative overflow-hidden group">
-               <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
-               <span className="text-xs font-mono text-[#64748B] uppercase tracking-widest z-10 mb-2">Advertisement</span>
-            </div>
+            {/* AD SLOT: SIDEBAR (RECTANGLE) */}
+            <AdUnit 
+              slotId="1234567890" // REPLACE THIS WITH REAL AD SLOT ID
+              format="rectangle"
+              className="w-full aspect-[3/4] bg-[#E5E5E1] border border-dashed border-[#2C3E50]/30"
+              label="Advertisement"
+            />
 
             {similarPosts && similarPosts.length > 0 && (
               <div>

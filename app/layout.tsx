@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Merriweather, Inter } from "next/font/google";
 import "./globals.css";
 import TranslationEngine from "@/components/TranslationEngine";
-import { AuthProvider } from "@/components/providers/AuthProvider"; // Import
+import { AuthProvider } from "@/components/providers/AuthProvider";
+import AdSenseScript from "@/components/ads/AdSenseScript";
 
 const merriweather = Merriweather({ 
   subsets: ["latin"],
@@ -30,7 +31,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${merriweather.variable} ${inter.variable} font-sans min-h-screen relative`}>
-        <AuthProvider> {/* Wrap here */}
+        <AdSenseScript />
+        <AuthProvider>
           <TranslationEngine />
           <div className="paper-texture" />
           <div className="relative z-10">
