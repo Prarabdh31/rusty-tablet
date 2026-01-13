@@ -263,12 +263,12 @@ export default function AdminDashboard() {
             onClick={() => setActiveModule('PHANTOM')}
             className={`group relative p-6 border rounded-sm text-left transition-all overflow-hidden ${
               activeModule === 'PHANTOM' 
-                ? 'bg-[#1E293B] border-[#B7410E] text-white shadow-[0_0_20px_rgba(183,65,14,0.15)]' 
+                ? 'bg-[#B7410E] border-[#B7410E] text-white shadow-[0_0_20px_rgba(183,65,14,0.3)]' 
                 : 'bg-[#1E293B]/50 border-[#2C3E50] text-[#64748B] hover:border-[#B7410E]/50 hover:text-[#B7410E]'
             }`}
           >
             <div className="flex justify-between items-start mb-4">
-              <Ghost size={28} className={activeModule === 'PHANTOM' ? 'animate-pulse text-[#B7410E]' : ''} />
+              <Ghost size={28} className={activeModule === 'PHANTOM' ? 'animate-pulse' : ''} />
               <span className="text-[10px] font-mono opacity-50">MOD_01</span>
             </div>
             <h3 className="font-bold text-xl uppercase tracking-wider mb-1">The Phantom</h3>
@@ -280,12 +280,12 @@ export default function AdminDashboard() {
             onClick={() => setActiveModule('PULSE')}
             className={`group relative p-6 border rounded-sm text-left transition-all overflow-hidden ${
               activeModule === 'PULSE' 
-                ? 'bg-[#1E293B] border-[#B7410E] text-white shadow-[0_0_20px_rgba(183,65,14,0.15)]' 
+                ? 'bg-[#B7410E] border-[#B7410E] text-white shadow-[0_0_20px_rgba(183,65,14,0.3)]' 
                 : 'bg-[#1E293B]/50 border-[#2C3E50] text-[#64748B] hover:border-[#B7410E]/50 hover:text-[#B7410E]'
             }`}
           >
              <div className="flex justify-between items-start mb-4">
-              <Activity size={28} className={activeModule === 'PULSE' ? 'text-[#B7410E]' : ''} />
+              <Activity size={28} />
               <span className="text-[10px] font-mono opacity-50">MOD_02</span>
             </div>
             <h3 className="font-bold text-xl uppercase tracking-wider mb-1">The Pulse</h3>
@@ -297,12 +297,12 @@ export default function AdminDashboard() {
             onClick={() => setActiveModule('LENS')}
             className={`group relative p-6 border rounded-sm text-left transition-all overflow-hidden ${
               activeModule === 'LENS' 
-                ? 'bg-[#1E293B] border-[#B7410E] text-white shadow-[0_0_20px_rgba(183,65,14,0.15)]' 
+                ? 'bg-[#B7410E] border-[#B7410E] text-white shadow-[0_0_20px_rgba(183,65,14,0.3)]' 
                 : 'bg-[#1E293B]/50 border-[#2C3E50] text-[#64748B] hover:border-[#B7410E]/50 hover:text-[#B7410E]'
             }`}
           >
              <div className="flex justify-between items-start mb-4">
-              <Aperture size={28} className={activeModule === 'LENS' ? 'text-[#B7410E]' : ''} />
+              <Aperture size={28} />
               <span className="text-[10px] font-mono opacity-50">MOD_03</span>
             </div>
             <h3 className="font-bold text-xl uppercase tracking-wider mb-1">The Lens</h3>
@@ -365,7 +365,7 @@ export default function AdminDashboard() {
                          </div>
                          {newsMode === 'AUTOMATIC' ? (
                             <select value={newsCategory} onChange={(e) => setNewsCategory(e.target.value)} className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] rounded-sm">
-                              {['Technology', 'Business', 'Politics', 'Science'].map(c => <option key={c} value={c}>{c}</option>)}
+                              {NEWS_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                          ) : (
                             <input type="text" value={newsTopic} onChange={(e) => setNewsTopic(e.target.value)} placeholder="Target Topic..." className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] rounded-sm placeholder-[#64748B]/50" />
