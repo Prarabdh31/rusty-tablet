@@ -7,9 +7,15 @@ import { createBrowserClient } from '@supabase/ssr';
 
 // --- CONFIGURATION OPTIONS ---
 const REGIONS = ['US', 'IN', 'UK', 'JP', 'Global', 'EU', 'Mars Colony'];
-const SENTIMENTS = ['Objective', 'Critical', 'Supportive', 'Satirical', 'Investigative', 'Opinionated'];
+const SENTIMENTS = [
+  'Objective', 'Critical', 'Supportive', 'Satirical', 'Investigative', 'Opinionated',
+  'Psychological', 'Curiosity', 'Skeptic', 'Contemplation', 'Frustration', 'Humor', 'Irony'
+];
 const COMPLEXITIES = ['EASY', 'GENERAL', 'TECHNICAL'];
-const NEWS_CATEGORIES = ['Business', 'Technology', 'Science', 'Health', 'Politics', 'Entertainment', 'Sports'];
+const NEWS_CATEGORIES = [
+  'Business', 'Technology', 'Science', 'Health', 'Politics', 'Entertainment', 'Sports',
+  'History', 'Finance', 'Gaming', 'Literature'
+];
 
 const RSS_FEEDS = [
   { label: 'The Verge (Tech)', url: 'https://www.theverge.com/rss/index.xml' },
@@ -48,10 +54,14 @@ export default function AdminDashboard() {
 
   // Settings
   const [region, setRegion] = useState('Global');
-  const [sentiment, setSentiment] = useState('Objective');
+  // Changed sentiment to array for multi-select
+  const [selectedSentiments, setSelectedSentiments] = useState<string[]>(['Objective']);
   const [complexity, setComplexity] = useState('GENERAL');
   const [wordCount, setWordCount] = useState(800);
   const [layoutInstructions, setLayoutInstructions] = useState('');
+  // New input
+  const [thoughtDirection, setThoughtDirection] = useState('');
+  
   const [includeSidebar, setIncludeSidebar] = useState(true);
   const [generateSocial, setGenerateSocial] = useState(true);
 
@@ -83,8 +93,9 @@ export default function AdminDashboard() {
           news_topic: mode === 'NEWS_API_AI' ? newsTopic : undefined,
           
           target_region: region,
-          article_sentiment: sentiment,
+          article_sentiment: selectedSentiments.join(', '), // Join array to string
           complexity,
+          thought_direction: thoughtDirection || undefined, // Pass thought direction
           word_count: Number(wordCount),
           layout_instructions: layoutInstructions || undefined,
           include_sidebar: includeSidebar,
@@ -223,6 +234,14 @@ export default function AdminDashboard() {
       fetchArticles();
     } catch (error) {
       alert('Failed to save changes. Check key.');
+    }
+  };
+
+  const toggleSentiment = (s: string) => {
+    if (selectedSentiments.includes(s)) {
+      setSelectedSentiments(prev => prev.filter(item => item !== s));
+    } else {
+      setSelectedSentiments(prev => [...prev, s]);
     }
   };
 
@@ -415,18 +434,53 @@ export default function AdminDashboard() {
                     <span className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Target Length</span>
                     <input type="number" value={wordCount} onChange={(e) => setWordCount(Number(e.target.value))} className="w-full bg-white border border-[#2C3E50]/20 p-2 text-sm rounded-sm" />
                   </div>
-                  <div>
-                    <span className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Sentiment</span>
-                    <select value={sentiment} onChange={(e) => setSentiment(e.target.value)} className="w-full bg-white border border-[#2C3E50]/20 p-2 text-sm rounded-sm">
-                      {SENTIMENTS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
+                  {/* Updated Complexity */}
                   <div>
                     <span className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Complexity</span>
                     <select value={complexity} onChange={(e) => setComplexity(e.target.value)} className="w-full bg-white border border-[#2C3E50]/20 p-2 text-sm rounded-sm">
                       {COMPLEXITIES.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
+                  {/* New Thought Direction */}
+                  <div>
+                    <span className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Thought Direction (Optional)</span>
+                    <input 
+                      type="text" 
+                      value={thoughtDirection} 
+                      onChange={(e) => setThoughtDirection(e.target.value)}
+                      placeholder="e.g. Optimistic about future..." 
+                      className="w-full bg-white border border-[#2C3E50]/20 p-2 text-sm rounded-sm" 
+                    />
+                  </div>
+                </div>
+                
+                {/* Updated Sentiment Multi-Select UI */}
+                <div>
+                  <span className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Sentiment Mix (Select Multiple)</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-[#2C3E50]/20 p-2 rounded-sm max-h-32 overflow-y-auto bg-white">
+                    {SENTIMENTS.map(s => (
+                      <label key={s} className="flex items-center gap-2 cursor-pointer text-xs p-1 hover:bg-[#F5F5F1] rounded-sm transition-colors">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedSentiments.includes(s)} 
+                          onChange={() => toggleSentiment(s)}
+                          className="accent-[#B7410E]"
+                        />
+                        {s}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <span className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Custom Layout Instructions (Optional)</span>
+                  <textarea 
+                    value={layoutInstructions}
+                    onChange={(e) => setLayoutInstructions(e.target.value)}
+                    rows={3}
+                    placeholder="e.g. Start with a controversial quote, then analysis..."
+                    className="w-full bg-white border border-[#2C3E50]/20 p-3 text-sm rounded-sm focus:border-[#B7410E] outline-none"
+                  />
                 </div>
 
                 <div className="flex flex-col md:flex-row gap-4 md:gap-6">
@@ -448,7 +502,7 @@ export default function AdminDashboard() {
 
             {/* Output Console */}
             <div className="lg:col-span-5">
-              <div className="bg-[#2C3E50] text-[#F5F5F1] p-6 rounded-sm shadow-lg h-auto lg:h-full lg:min-h-[500px] font-mono text-sm relative overflow-hidden">
+              <div className="bg-[#2C3E50] text-[#F5F5F1] p-6 rounded-sm shadow-lg h-full min-h-[500px] font-mono text-sm relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-32 bg-[#B7410E] rounded-full blur-3xl opacity-5 pointer-events-none"></div>
                 <h3 className="border-b border-[#F5F5F1]/20 pb-4 mb-4 font-bold uppercase tracking-wider flex items-center gap-2">
                   System Output <div className={`w-2 h-2 rounded-full ${genLoading ? 'bg-yellow-400 animate-pulse' : 'bg-green-400'}`}></div>

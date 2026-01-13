@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { fetchRSSFeed, RSSItem } from '@/lib/services/rss';
+import { fetchRSSFeed } from '@/lib/services/rss';
 import { fetchNewsContext } from '@/lib/services/newsapi';
 import { generateImagenBuffer } from '@/lib/services/imagen';
 import { getUnsplashImageBuffer } from '@/lib/services/unsplash';
@@ -28,6 +28,9 @@ interface RequestBody {
     article_sentiment?: string;    
     complexity?: 'EASY' | 'GENERAL' | 'TECHNICAL'; 
     
+    // New Feature: Thought Direction
+    thought_direction?: string;
+
     word_count?: number; 
     layout_instructions?: string; 
     
@@ -39,8 +42,8 @@ interface RequestBody {
 interface VisualPlanItem {
   id: string; // "VISUAL_1", "VISUAL_2", or "FEATURED"
   type: 'FEATURED' | 'INLINE';
-  prompt: string; // Detailed prompt for Imagen
-  search_keyword: string; // Backup keyword for Unsplash
+  prompt: string; 
+  search_keyword: string; 
   caption: string;
   style: 'PHOTOREALISTIC' | 'ILLUSTRATION' | 'INFOGRAPHIC';
 }
@@ -71,7 +74,11 @@ async function generateArticleText(
   const region = config.target_region || 'Global';
   const sentiment = config.article_sentiment || 'Objective';
   const complexity = config.complexity || 'GENERAL';
+  const directionInstruction = config.thought_direction 
+    ? `8. **Thought Direction:** Ensure the article builds towards or explores this specific angle/conclusion: "${config.thought_direction}".` 
+    : '';
 
+  // Layout Logic
   const defaultLayout = `
     - Start with a "Nut Graph" (Why this matters).
     - Use a "Key Takeaways" bullet list.
@@ -91,7 +98,7 @@ async function generateArticleText(
     - Region/Persona: ${region}
     - Word Count: ~${wordCount} words
     - Sentiment: ${sentiment}
-    - Reading Level: ${complexity}
+    - Reading Level: ${complexity} (EASY = Grade 8, GENERAL = NYT Style, TECHNICAL = Academic)
     
     INSTRUCTIONS:
     1. **Visual Director Mode:** You must plan the visual assets. 
@@ -101,6 +108,8 @@ async function generateArticleText(
     2. **Writing:** Write the article following the "Rusty Tablet" industrial/analytical tone.
     3. **Metadata:** Generate headlines, nut graph, sidebar, and social posts.
     
+    ${directionInstruction}
+
     LAYOUT INSTRUCTIONS:
     ${layout}
     
@@ -113,7 +122,7 @@ async function generateArticleText(
       "title": "String",
       "alt_headlines": ["String", "String", "String"],
       "slug": "kebab-case-string",
-      "category": "String (Single Word)",
+      "category": "String (Single Word Only, No slashes)",
       "excerpt": "String (2 sentences)",
       "nut_graph": "String",
       "content": "Markdown String (With [VISUAL_1] placeholders)",
@@ -162,16 +171,23 @@ async function generateArticleText(
       })
     });
 
-    if (!response.ok) throw new Error(`Gemini API Error: ${response.status}`);
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Gemini API Error (${response.status}):`, errorText);
+        throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
+    }
+
     const data = await response.json();
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!rawText) {
+        console.warn("Gemini produced no text. Retrying...");
         if (retryCount < 1) return generateArticleText(context, config, retryCount + 1);
         throw new Error("Gemini produced no text");
     }
 
-    return JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+    const cleanedJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleanedJson);
   } catch (error: any) {
     console.error("Gemini Generation Failed:", error);
     throw new Error(`Failed to generate article: ${error.message}`);
@@ -230,7 +246,7 @@ export async function POST(req: NextRequest) {
     // 2. GENERATION
     const articleData = await generateArticleText(contextData, config);
 
-    // 3. ASSET PIPELINE (The "Visual Director" Execution)
+    // 3. ASSET PIPELINE (Restored Visual Plan Logic)
     const visualPlan = articleData.visual_plan || [];
     let finalContent = articleData.content;
     let featuredImageUrl: string | null = null;
@@ -279,7 +295,7 @@ export async function POST(req: NextRequest) {
            console.log(`[Asset] Fallback to Unsplash: ${item.search_keyword}`);
            const unsplashData = await getUnsplashImageBuffer(item.search_keyword);
            if (unsplashData) {
-             buffer = Buffer.from(unsplashData.buffer); // Ensure Buffer type
+             buffer = Buffer.from(unsplashData.buffer); 
              source = 'UNSPLASH';
              credit = unsplashData.credit;
            }
@@ -330,7 +346,7 @@ export async function POST(req: NextRequest) {
     if (existingAuthor) authorId = existingAuthor.id;
     else {
       const { data: newAuthor } = await supabaseAdmin.from('authors').insert({
-        name: generatedAuthorName, role: articleData.author_role, is_ai: true, bio: `Reporting from ${config.target_region}.`
+        name: generatedAuthorName, role: articleData.author_role, is_ai: true, bio: `Reporting from ${config.target_region || 'Global'}.`
       }).select().single();
       authorId = newAuthor?.id;
     }
@@ -377,6 +393,12 @@ export async function POST(req: NextRequest) {
       success: true, 
       post_id: post.id, 
       title: post.title, 
+      author: generatedAuthorName,
+      category: articleData.category,
+      tabloid_features: {
+        has_sidebar: !!articleData.sidebar_content,
+        has_social: !!articleData.social_text
+      },
       images_processed: processedImages.length
     });
 
