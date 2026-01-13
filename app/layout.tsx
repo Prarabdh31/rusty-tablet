@@ -3,6 +3,8 @@ import { Merriweather, Inter } from "next/font/google";
 import "./globals.css";
 import TranslationEngine from "@/components/TranslationEngine";
 import { AuthProvider } from "@/components/providers/AuthProvider";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const merriweather = Merriweather({ 
   subsets: ["latin"],
@@ -27,12 +29,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Access environment variable directly for the raw script
   const publisherId = process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID;
 
   return (
     <html lang="en">
       <head>
-        {/* Google Analytics */}
         <script 
           async 
           src="https://www.googletagmanager.com/gtag/js?id=G-CXCE30BVHL"
@@ -47,13 +49,15 @@ export default function RootLayout({
             `,
           }}
         />
-        {/* AdSense */}
+        {/* Direct injection of AdSense script into <head>.
+          This is the most robust method for initial site verification.
+        */}
         {publisherId && (
           <script
             async
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
             crossOrigin="anonymous"
-          />
+          ></script>
         )}
       </head>
       <body className={`${merriweather.variable} ${inter.variable} font-sans min-h-screen relative`}>
@@ -63,6 +67,8 @@ export default function RootLayout({
           <div className="relative z-10">
             {children}
           </div>
+          <Analytics />
+          <SpeedInsights />
         </AuthProvider>
       </body>
     </html>
