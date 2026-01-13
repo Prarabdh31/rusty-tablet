@@ -3,7 +3,6 @@ import { Merriweather, Inter } from "next/font/google";
 import "./globals.css";
 import TranslationEngine from "@/components/TranslationEngine";
 import { AuthProvider } from "@/components/providers/AuthProvider";
-// Removed AdSenseScript import to use direct injection
 
 const merriweather = Merriweather({ 
   subsets: ["latin"],
@@ -28,21 +27,33 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Access environment variable directly for the raw script
   const publisherId = process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID;
 
   return (
     <html lang="en">
       <head>
-        {/* Direct injection of AdSense script into <head>.
-          This is the most robust method for initial site verification.
-        */}
+        {/* Google Analytics */}
+        <script 
+          async 
+          src="https://www.googletagmanager.com/gtag/js?id=G-CXCE30BVHL"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-CXCE30BVHL');
+            `,
+          }}
+        />
+        {/* AdSense */}
         {publisherId && (
           <script
             async
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${publisherId}`}
             crossOrigin="anonymous"
-          ></script>
+          />
         )}
       </head>
       <body className={`${merriweather.variable} ${inter.variable} font-sans min-h-screen relative`}>
