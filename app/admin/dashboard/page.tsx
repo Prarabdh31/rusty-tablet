@@ -93,6 +93,14 @@ export default function AdminDashboard() {
   );
 
   // --- HANDLERS ---
+  // Helper to convert UTC string to Local datetime-local value (YYYY-MM-DDTHH:mm)
+  const toLocalISOString = (dateString: string) => {
+    const date = new Date(dateString);
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    const localDate = new Date(date.getTime() - offsetMs);
+    return localDate.toISOString().slice(0, 16);
+  };
+
   const handleGenerate = async (e: React.FormEvent, overridePayload?: any) => {
     e && e.preventDefault();
     setGenLoading(true);
@@ -169,12 +177,10 @@ export default function AdminDashboard() {
       });
       if (resConfig.ok) {
         const json = await resConfig.json();
-        // Defaults + Normalize sentiment keys if missing
         const defaults = {
             "Objective": 50, "Critical": 20, "Satirical": 10, "Opinionated": 20
         };
         const loadedSentiments = json.config?.sentiment_weights || {};
-        // If loaded is empty, use defaults. Otherwise trust loaded.
         const mergedSentiments = Object.keys(loadedSentiments).length > 0 ? loadedSentiments : defaults;
 
         setPulseConfig(json.config || {
@@ -245,7 +251,6 @@ export default function AdminDashboard() {
       });
       if (res.ok) {
         await fetchPulseData();
-        // Immediately try to run the first job
         setTimeout(async () => {
             const queueRes = await fetch('/api/admin/pulse/queue', { headers: { 'Authorization': `Bearer ${authKey}` } });
             const queueJson = await queueRes.json();
@@ -277,22 +282,33 @@ export default function AdminDashboard() {
     }
   };
 
-  const runPulseJob = async (id: string, params: any) => {
+  const runPulseJob = async (id: string, _unusedParams?: any) => {
     if (!authKey) return alert('Security Clearance Required');
+    
+    // Optimistic update
+    setPulseQueue(prev => prev.map(job => job.id === id ? { ...job, status: 'PROCESSING' } : job));
+
     try {
-      // Optimistic update
-      setPulseQueue(prev => prev.map(job => job.id === id ? { ...job, status: 'PROCESSING' } : job));
-      
-      const res = await handleGenerate(null as any, params); 
-      if (res?.success) {
-          await fetch(`/api/admin/pulse/queue?id=${id}`, {
-            method: 'DELETE', headers: { 'Authorization': `Bearer ${authKey}` }
-          });
-          fetchPulseData();
+      // FIX: Use the atomic Run API instead of local handleGenerate
+      const response = await fetch('/api/admin/pulse/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authKey}`
+        },
+        body: JSON.stringify({ id })
+      });
+
+      const json = await response.json();
+
+      if (response.ok) {
+         fetchPulseData(); // Refresh queue and logs
+      } else {
+         throw new Error(json.error || 'Run failed');
       }
-    } catch (e) {
-      alert('Failed to run job');
-      fetchPulseData();
+    } catch (e: any) {
+      alert(`Failed to run job: ${e.message}`);
+      fetchPulseData(); // Revert state
     }
   };
 
@@ -306,7 +322,8 @@ export default function AdminDashboard() {
          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` },
          body: JSON.stringify({
             id: editingJob.id,
-            scheduled_at: editingJob.scheduled_at,
+            // Convert local time back to ISO UTC string for DB
+            scheduled_at: new Date(editingJob.scheduled_at).toISOString(),
             job_params: editingJob.job_params
          })
        });
@@ -322,92 +339,74 @@ export default function AdminDashboard() {
      }
   };
 
+  // --- SHARED UI HELPERS ---
+  const toggleSentiment = (s: string) => {
+    setSelectedSentiments(prev => prev.includes(s) ? prev.filter(item => item !== s) : [...prev, s]);
+  };
+  
+  const filteredArticles = articles.filter(article => {
+    const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = filterCategory === 'All' || article.category === filterCategory;
+    return matchesSearch && matchesCategory;
+  });
+  const uniqueCategories = ['All', ...Array.from(new Set(articles.map(a => a.category))).filter(Boolean).sort()];
+
+  // Manager Actions
+  const toggleVisibility = async (id: string, currentStatus: boolean) => {
+    if (!authKey) return alert('Security Clearance Required.');
+    setArticles(prev => prev.map(a => a.id === id ? { ...a, is_published: !currentStatus } : a));
+    try {
+      await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id, is_published: !currentStatus }) });
+    } catch (error) { alert('Update failed'); fetchArticles(); }
+  };
+
+  const deleteArticle = async (id: string) => {
+    if (!authKey) return alert('Security Clearance Required.');
+    if (!confirm('Delete permanently?')) return;
+    try {
+      await fetch(`/api/admin/manage?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authKey}` } });
+      fetchArticles();
+    } catch (error) { alert('Delete failed'); }
+  };
+
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authKey) return alert('Security Clearance Required.');
+    try {
+      const res = await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id: editingArticle.id, title: editingArticle.title, content: editingArticle.content, category: editingArticle.category }) });
+      if (!res.ok) throw new Error();
+      setEditingArticle(null);
+      fetchArticles();
+    } catch { alert('Save failed'); }
+  };
+
   const handleAddSentiment = (s: string) => {
      if (!pulseConfig) return;
      const current = pulseConfig.sentiment_weights || {};
-     // Add with 0 weight if not exists
      if (current[s] === undefined) {
         setPulseConfig({...pulseConfig, sentiment_weights: { ...current, [s]: 10 } });
      }
   };
-
   const handleRemoveSentiment = (s: string) => {
     if (!pulseConfig) return;
     const current = { ...pulseConfig.sentiment_weights };
     delete current[s];
     setPulseConfig({...pulseConfig, sentiment_weights: current });
   };
-
-  const toggleSentiment = (s: string) => {
-    setSelectedSentiments(prev => prev.includes(s) ? prev.filter(item => item !== s) : [...prev, s]);
+  
+  // Helper for IST Time Display (Client side)
+  const formatIST = (dateString: string) => {
+    try {
+      // Use toLocaleString to force IST
+      return new Date(dateString).toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true
+      }) + " IST";
+    } catch {
+      return dateString;
+    }
   };
 
-  const toggleVisibility = async (id: string, currentStatus: boolean) => {
-  if (!authKey) return alert('Security Clearance Required');
-  try {
-    const response = await fetch('/api/admin/manage', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` },
-      body: JSON.stringify({ id, is_published: !currentStatus })
-    });
-    if (response.ok) fetchArticles();
-    else alert('Failed to update visibility');
-  } catch (error) {
-    console.error("Toggle Error", error);
-    alert('Error updating visibility');
-  }
-};
-
-const deleteArticle = async (id: string) => {
-  if (!authKey || !confirm('Delete this article permanently?')) return;
-  try {
-    const response = await fetch(`/api/admin/manage?id=${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${authKey}` }
-    });
-    if (response.ok) fetchArticles();
-    else alert('Failed to delete article');
-  } catch (error) {
-    console.error("Delete Error", error);
-    alert('Error deleting article');
-  }
-};
-
-const handleEditSave = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!authKey) return alert('Security Clearance Required');
-  try {
-    const response = await fetch('/api/admin/manage', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` },
-      body: JSON.stringify({
-        id: editingArticle.id,
-        title: editingArticle.title,
-        category: editingArticle.category,
-        content: editingArticle.content
-      })
-    });
-    if (response.ok) {
-      setEditingArticle(null);
-      fetchArticles();
-    } else {
-      alert('Failed to save changes');
-    }
-  } catch (error) {
-    console.error("Save Error", error);
-    alert('Error saving article');
-  }
-};
-
-  const filteredArticles = articles.filter(article => {
-    const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = filterCategory === 'All' || article.category === filterCategory;
-    return matchesSearch && matchesCategory;
-  });
-
-  const uniqueCategories = ['All', ...Array.from(new Set(articles.map(a => a.category))).filter(Boolean).sort()];
-
-  // Helper for Pulse Sliders
   const WeightSlider = ({ category, label, weights, onChange, allowAdd = false }: any) => {
     if (!weights) return null;
     return (
@@ -430,7 +429,6 @@ const handleEditSave = async (e: React.FormEvent) => {
                     )}
                   </div>
                 </div>
-                {/* Improved Slider Track */}
                 <input 
                   type="range" 
                   min="0" max="100" step="1"
@@ -441,8 +439,6 @@ const handleEditSave = async (e: React.FormEvent) => {
               </div>
             ))}
          </div>
-         
-         {/* Add Sentiment Button */}
          {allowAdd && (
              <div className="mt-4 pt-4 border-t border-[#2C3E50]">
                  <p className="text-[10px] text-[#64748B] mb-2 uppercase font-bold">Add to Mix:</p>
@@ -463,7 +459,6 @@ const handleEditSave = async (e: React.FormEvent) => {
     <main className="min-h-screen bg-[#0F172A] font-sans text-[#F5F5F1] pb-24 selection:bg-[#B7410E] selection:text-white">
       <Navbar />
 
-      {/* --- THE PRISM HEADER --- */}
       <div className="bg-[#1E293B] border-b border-[#B7410E]/20 relative overflow-hidden">
         <div className="absolute top-0 right-0 p-64 bg-[#B7410E] rounded-full blur-[150px] opacity-5 pointer-events-none"></div>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 relative z-10">
@@ -498,10 +493,13 @@ const handleEditSave = async (e: React.FormEvent) => {
           ))}
         </div>
 
-        {/* --- PHANTOM VIEWPORT --- */}
-        {activeModule === 'PHANTOM' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 animate-in fade-in slide-in-from-bottom-4 duration-500">
-             <div className="lg:col-span-7 space-y-8">
+        {/* --- MODULE VIEWPORT --- */}
+        <div className="border-t border-[#2C3E50] pt-12 relative min-h-[600px]">
+          
+          {/* 1. THE PHANTOM (GENERATOR) */}
+          {activeModule === 'PHANTOM' && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="lg:col-span-7 space-y-8">
                 {/* Source Selection */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                    {['MANUAL', 'SPECIFIC_RSS', 'NEWS_API_AI'].map((m) => (
@@ -518,22 +516,10 @@ const handleEditSave = async (e: React.FormEvent) => {
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-[#B7410E] uppercase tracking-widest mb-4 flex items-center gap-2"><span className="w-2 h-2 bg-[#B7410E] rounded-full"></span> Parameter Matrix</h4>
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] uppercase text-[#64748B] font-bold">Region</label>
-                      <select value={region} onChange={(e) => setRegion(e.target.value)} className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E]">{REGIONS.map(r => <option key={r} value={r}>{r}</option>)}</select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase text-[#64748B] font-bold">Complexity</label>
-                      <select value={complexity} onChange={(e) => setComplexity(e.target.value)} className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E]">{COMPLEXITIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase text-[#64748B] font-bold">Length</label>
-                      <input type="number" value={wordCount} onChange={(e) => setWordCount(Number(e.target.value))} className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E]" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] uppercase text-[#64748B] font-bold">Direction</label>
-                      <input type="text" value={thoughtDirection} onChange={(e) => setThoughtDirection(e.target.value)} placeholder="e.g. Hopeful" className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E] placeholder-[#64748B]/50" />
-                    </div>
+                    <div><label className="text-[10px] uppercase text-[#64748B] font-bold">Region</label><select value={region} onChange={(e) => setRegion(e.target.value)} className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E]">{REGIONS.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                    <div><label className="text-[10px] uppercase text-[#64748B] font-bold">Complexity</label><select value={complexity} onChange={(e) => setComplexity(e.target.value)} className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E]">{COMPLEXITIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                    <div><label className="text-[10px] uppercase text-[#64748B] font-bold">Length</label><input type="number" value={wordCount} onChange={(e) => setWordCount(Number(e.target.value))} className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E]" /></div>
+                    <div><label className="text-[10px] uppercase text-[#64748B] font-bold">Direction</label><input type="text" value={thoughtDirection} onChange={(e) => setThoughtDirection(e.target.value)} placeholder="e.g. Hopeful" className="w-full bg-[#1E293B] border border-[#2C3E50] text-[#F5F5F1] p-2 text-xs rounded-sm focus:border-[#B7410E] placeholder-[#64748B]/50" /></div>
                   </div>
                 </div>
                 {/* Sentiments */}
@@ -567,7 +553,6 @@ const handleEditSave = async (e: React.FormEvent) => {
         {/* 2. THE PULSE (SCHEDULER) */}
         {activeModule === 'PULSE' && pulseConfig && (
           <div className="space-y-12 animate-in fade-in">
-             {/* TOP: STATUS CARD */}
              <div className={`p-6 border-l-4 rounded-sm flex items-center justify-between ${pulseConfig.is_active ? 'bg-green-900/10 border-green-500' : 'bg-[#1E293B] border-[#64748B]'}`}>
                 <div className="flex items-center gap-4">
                    <div className={`p-3 rounded-full ${pulseConfig.is_active ? 'bg-green-500/20 text-green-400' : 'bg-[#2C3E50] text-[#64748B]'}`}>
@@ -583,14 +568,11 @@ const handleEditSave = async (e: React.FormEvent) => {
                   <button onClick={() => setPulseConfig({...pulseConfig, is_active: !pulseConfig.is_active})} className={`px-6 py-3 text-xs font-bold uppercase tracking-widest rounded-sm transition-colors border ${pulseConfig.is_active ? 'border-red-500 text-red-500 hover:bg-red-500 hover:text-white' : 'border-green-500 text-green-500 hover:bg-green-500 hover:text-white'}`}>{pulseConfig.is_active ? 'PAUSE ENGINE' : 'ACTIVATE ENGINE'}</button>
                 </div>
              </div>
-
-             {/* MIDDLE: STRATEGY CONFIG */}
              <div className="bg-[#1E293B] border border-[#2C3E50] rounded-sm p-6">
                 <div className="flex justify-between items-center mb-6 cursor-pointer" onClick={() => setConfigCollapsed(!configCollapsed)}>
                    <h3 className="font-bold text-[#B7410E] uppercase tracking-wider text-sm flex items-center gap-2"><Settings size={18} /> Editorial Strategy</h3>
                    {configCollapsed ? <ChevronDown className="text-[#64748B]" /> : <ChevronUp className="text-[#64748B]" />}
                 </div>
-                
                 {!configCollapsed && (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -611,71 +593,49 @@ const handleEditSave = async (e: React.FormEvent) => {
                   </>
                 )}
              </div>
-
-             {/* BOTTOM 1: QUEUE GRID */}
              <div className="bg-[#1E293B] border border-[#2C3E50] rounded-sm p-6">
                 <div className="flex justify-between items-center mb-6">
                    <h3 className="font-bold text-[#F5F5F1] uppercase tracking-wider text-sm flex items-center gap-2"><List size={18} /> Upcoming Queue</h3>
                    <button onClick={fetchPulseData} className="text-[#64748B] hover:text-[#B7410E]"><RefreshCw size={16} /></button>
                 </div>
-                <div className="overflow-x-auto rounded-sm border border-[#2C3E50]">
-                   <table className="w-full text-xs text-left">
-                      <thead className="bg-[#0F172A] text-[#64748B] font-bold uppercase tracking-wider">
-                         <tr>
-                            <th className="px-4 py-3">Time</th>
-                            <th className="px-4 py-3">Mode</th>
-                            <th className="px-4 py-3">Region</th>
-                            <th className="px-4 py-3">Status</th>
-                            <th className="px-4 py-3 text-right">Actions</th>
-                         </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#2C3E50] bg-[#1E293B]">
-                         {pulseQueue.length === 0 ? (
-                           <tr><td colSpan={5} className="text-center py-8 text-[#64748B] italic">No jobs queued.</td></tr>
-                         ) : pulseQueue.map((job) => (
-                           <tr key={job.id} className="hover:bg-[#2C3E50]/50 transition-colors group">
-                              <td className="px-4 py-3 font-mono text-[#B7410E]">{new Date(job.scheduled_at).toLocaleString()}</td>
-                              <td className="px-4 py-3 text-[#F5F5F1]">{job.job_params.mode.replace(/_/g, ' ')}</td>
-                              <td className="px-4 py-3 text-[#64748B]">{job.job_params.config.target_region}</td>
-                              <td className="px-4 py-3"><span className="px-2 py-1 bg-[#2C3E50] rounded-full text-[10px] font-bold">{job.status}</span></td>
-                              <td className="px-4 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                 <button onClick={() => runPulseJob(job.id, job.job_params)} className="text-[#64748B] hover:text-green-500" title="Run Now"><Play size={14} /></button>
-                                 <button onClick={() => setEditingJob(job)} className="text-[#64748B] hover:text-[#B7410E]" title="Edit"><Edit2 size={14} /></button>
-                                 <button onClick={() => deletePulseJob(job.id)} className="text-[#64748B] hover:text-red-500" title="Cancel"><X size={14} /></button>
-                              </td>
-                           </tr>
-                         ))}
-                      </tbody>
-                   </table>
+                <div className="h-[600px] overflow-y-auto custom-scrollbar space-y-3 pr-2">
+                   {pulseQueue.length === 0 ? (
+                      <div className="text-center py-20 text-[#2C3E50] font-mono text-xs">QUEUE EMPTY</div>
+                   ) : (
+                      pulseQueue.map((job) => (
+                        <div key={job.id} className="bg-[#1E293B] border border-[#2C3E50] p-4 rounded-sm flex justify-between items-start group hover:border-[#B7410E]/50 transition-colors">
+                           <div className="flex-1">
+                              <div className="text-[#B7410E] font-mono text-xs mb-1" suppressHydrationWarning>{formatIST(job.scheduled_at)}</div>
+                              <div className="text-[#F5F5F1] text-sm font-bold">{job.job_params.mode.replace(/_/g, ' ')}</div>
+                              <div className="text-[#64748B] text-[10px] uppercase mt-1">
+                                {job.job_params.config.target_region} • {job.job_params.config.article_sentiment}
+                              </div>
+                           </div>
+                           <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                             <button onClick={() => runPulseJob(job.id, job.job_params)} className="text-[#64748B] hover:text-green-500" title="Run Now"><Play size={14} /></button>
+                             <button onClick={() => setEditingJob(job)} className="text-[#64748B] hover:text-[#B7410E]" title="Edit"><Edit2 size={14} /></button>
+                             <button onClick={() => deletePulseJob(job.id)} className="text-[#64748B] hover:text-red-500" title="Cancel"><X size={14} /></button>
+                           </div>
+                        </div>
+                      ))
+                   )}
                 </div>
              </div>
-
-             {/* BOTTOM 2: EXECUTION LOGS */}
              <div className="bg-[#1E293B] border border-[#2C3E50] rounded-sm p-6">
                 <h3 className="font-bold text-[#F5F5F1] uppercase tracking-wider text-sm flex items-center gap-2 mb-6"><History size={18} /> Execution Log</h3>
                 <div className="overflow-x-auto rounded-sm border border-[#2C3E50] max-h-[300px]">
                    <table className="w-full text-xs text-left">
                       <thead className="bg-[#0F172A] text-[#64748B] font-bold uppercase tracking-wider sticky top-0">
-                         <tr>
-                            <th className="px-4 py-3">Executed At</th>
-                            <th className="px-4 py-3">Status</th>
-                            <th className="px-4 py-3">Result</th>
-                         </tr>
+                         <tr><th className="px-4 py-3">Executed At</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Result</th></tr>
                       </thead>
                       <tbody className="divide-y divide-[#2C3E50] bg-[#1E293B]">
                          {pulseLogs.length === 0 ? (
                            <tr><td colSpan={3} className="text-center py-8 text-[#64748B] italic">No history found.</td></tr>
                          ) : pulseLogs.map((log) => (
                            <tr key={log.id} className="hover:bg-[#2C3E50]/50 transition-colors">
-                              <td className="px-4 py-3 font-mono text-[#64748B]" suppressHydrationWarning>{new Date(log.executed_at).toLocaleString()}</td>
-                              <td className="px-4 py-3">
-                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${log.status === 'SUCCESS' ? 'bg-green-900/20 text-green-500' : 'bg-red-900/20 text-red-500'}`}>
-                                  {log.status}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-[#F5F5F1] truncate max-w-md">
-                                {log.result_summary?.title || log.result_summary?.error || JSON.stringify(log.result_summary)}
-                              </td>
+                              <td className="px-4 py-3 font-mono text-[#64748B]" suppressHydrationWarning>{formatIST(log.executed_at)}</td>
+                              <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${log.status === 'SUCCESS' ? 'bg-green-900/20 text-green-500' : 'bg-red-900/20 text-red-500'}`}>{log.status}</span></td>
+                              <td className="px-4 py-3 text-[#F5F5F1] truncate max-w-md">{log.result_summary?.title || log.result_summary?.error || JSON.stringify(log.result_summary)}</td>
                            </tr>
                          ))}
                       </tbody>
@@ -758,7 +718,7 @@ const handleEditSave = async (e: React.FormEvent) => {
                 </div>
              </div>
           )}
-
+      </div>
       </div>
 
       {/* --- MANIFESTO MODAL --- */}
@@ -809,7 +769,7 @@ const handleEditSave = async (e: React.FormEvent) => {
                    <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Scheduled Time</label>
                    <input 
                       type="datetime-local" 
-                      value={editingJob.scheduled_at.slice(0, 16)} 
+                      value={toLocalISOString(editingJob.scheduled_at)}
                       onChange={e => setEditingJob({...editingJob, scheduled_at: new Date(e.target.value).toISOString()})}
                       className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
                    />
