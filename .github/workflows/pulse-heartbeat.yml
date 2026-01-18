@@ -2,9 +2,9 @@ name: Pulse Engine Heartbeat
 
 on:
   schedule:
-    # Runs every 15 minutes (adjust as needed)
+    # Runs every 15 minutes
     - cron: '*/15 * * * *'
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   heartbeat:
@@ -12,5 +12,9 @@ jobs:
     steps:
       - name: Trigger Pulse API
         run: |
-          curl -X GET ${{ secrets.PULSE_ENDPOINT }} \
-          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          # -L: Follow redirects (Critical fix)
+          # -v: Verbose (Show us what's happening)
+          # --fail: Fail the job if the server returns 400/500 error
+          curl -L -v --fail \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          "${{ secrets.PULSE_ENDPOINT }}"
