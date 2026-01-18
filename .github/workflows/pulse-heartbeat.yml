@@ -1,0 +1,16 @@
+name: Pulse Engine Heartbeat
+
+on:
+  schedule:
+    # Runs every 15 minutes (adjust as needed)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Pulse API
+        run: |
+          curl -X GET ${{ secrets.PULSE_ENDPOINT }} \
+          -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
