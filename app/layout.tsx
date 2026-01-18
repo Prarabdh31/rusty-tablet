@@ -5,6 +5,7 @@ import TranslationEngine from "@/components/TranslationEngine";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import Script from "next/script";
 
 const merriweather = Merriweather({ 
   subsets: ["latin"],
@@ -33,22 +34,8 @@ export default function RootLayout({
   const publisherId = process.env.NEXT_PUBLIC_ADSENSE_PUBLISHER_ID;
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
-        <script 
-          async 
-          src="https://www.googletagmanager.com/gtag/js?id=G-CXCE30BVHL"
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'G-CXCE30BVHL');
-            `,
-          }}
-        />
         {/* Direct injection of AdSense script into <head>.
           This is the most robust method for initial site verification.
         */}
@@ -61,6 +48,20 @@ export default function RootLayout({
         )}
       </head>
       <body className={`${merriweather.variable} ${inter.variable} font-sans min-h-screen relative`}>
+        {/* Google Analytics via next/script to prevent hydration errors */}
+        <Script 
+          src="https://www.googletagmanager.com/gtag/js?id=G-CXCE30BVHL"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-CXCE30BVHL');
+          `}
+        </Script>
+
         <AuthProvider>
           <TranslationEngine />
           <div className="paper-texture" />
