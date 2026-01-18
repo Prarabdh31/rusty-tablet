@@ -35,12 +35,15 @@ interface RequestBody {
     layout_instructions?: string; 
     
     include_sidebar?: boolean;     
-    generate_social?: boolean;     
+    generate_social?: boolean;  
+    
+    // Image Control (From Pulse)
+    preferred_image_source?: 'imagen' | 'unsplash' | 'news_source';
   };
 }
 
 interface VisualPlanItem {
-  id: string; // "VISUAL_1", "VISUAL_2", or "FEATURED"
+  id: string; 
   type: 'FEATURED' | 'INLINE';
   prompt: string; 
   search_keyword: string; 
@@ -78,7 +81,6 @@ async function generateArticleText(
     ? `8. **Thought Direction:** Ensure the article builds towards or explores this specific angle/conclusion: "${config.thought_direction}".` 
     : '';
 
-  // Layout Logic
   const defaultLayout = `
     - Start with a "Nut Graph" (Why this matters).
     - Use a "Key Takeaways" bullet list.
@@ -98,13 +100,13 @@ async function generateArticleText(
     - Region/Persona: ${region}
     - Word Count: ~${wordCount} words
     - Sentiment: ${sentiment}
-    - Reading Level: ${complexity} (EASY = Grade 8, GENERAL = NYT Style, TECHNICAL = Academic)
+    - Reading Level: ${complexity}
     
     INSTRUCTIONS:
     1. **Visual Director Mode:** You must plan the visual assets. 
        - Always include 1 "FEATURED" image.
-       - Include 1-2 "INLINE" images where relevant in the body.
-       - Insert placeholders like [VISUAL_1], [VISUAL_2] in the markdown content where inline images should appear.
+       - Include 1-2 "INLINE" images where relevant.
+       - Insert placeholders like [VISUAL_1] in the markdown.
     2. **Writing:** Write the article following the "Rusty Tablet" industrial/analytical tone.
     3. **Metadata:** Generate headlines, nut graph, sidebar, and social posts.
     
@@ -204,6 +206,7 @@ export async function POST(req: NextRequest) {
   try {
     const body: RequestBody = await req.json();
     const { mode, config } = body;
+    const preferredSource = config.preferred_image_source || 'imagen';
     
     let contextData = "";
     let sourceUrl = "";
@@ -246,13 +249,12 @@ export async function POST(req: NextRequest) {
     // 2. GENERATION
     const articleData = await generateArticleText(contextData, config);
 
-    // 3. ASSET PIPELINE (Restored Visual Plan Logic)
+    // 3. ASSET PIPELINE (Logic Update)
     const visualPlan = articleData.visual_plan || [];
     let finalContent = articleData.content;
     let featuredImageUrl: string | null = null;
     const processedImages: any[] = [];
 
-    // Helper to upload and record image
     const saveImageAsset = async (buffer: Buffer, filename: string, meta: any) => {
        const upload = await uploadImageToStorage(buffer, filename);
        if (upload) {
@@ -262,16 +264,18 @@ export async function POST(req: NextRequest) {
        return null;
     };
 
-    // Iterate through visual plan
     for (const item of visualPlan) {
       try {
         let buffer: Buffer | null = null;
         let source = '';
         let credit = '';
 
-        // Strategy A: Use NewsAPI Image (Only for Featured)
-        if (item.type === 'FEATURED' && newsApiImage) {
-          console.log(`[Asset] Using NewsAPI Source Image for Featured`);
+        // Priority 1: Check News Source Image (Only for Featured)
+        // If preferred source is 'news_source' OR default logic, we try this.
+        const tryNewsSource = item.type === 'FEATURED' && newsApiImage && (preferredSource === 'news_source' || preferredSource === 'imagen');
+        
+        if (tryNewsSource && newsApiImage) {
+          console.log(`[Asset] Trying NewsAPI Source Image...`);
           const newsBuffer = await fetchExternalImageBuffer(newsApiImage);
           if (newsBuffer) {
              buffer = newsBuffer;
@@ -280,9 +284,23 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Strategy B: Gemini Imagen (If no buffer yet)
-        if (!buffer) {
-           console.log(`[Asset] Generating with Imagen: ${item.prompt.substring(0, 30)}...`);
+        // Priority 2: Unsplash (If preferred explicitly OR if News Source failed/not desired)
+        if (!buffer && preferredSource === 'unsplash') {
+           if (item.search_keyword) {
+             console.log(`[Asset] Preferred: Unsplash search: ${item.search_keyword}`);
+             const unsplashData = await getUnsplashImageBuffer(item.search_keyword);
+             if (unsplashData) {
+                buffer = Buffer.from(unsplashData.buffer);
+                source = 'UNSPLASH';
+                credit = unsplashData.credit;
+             }
+           }
+        }
+
+        // Priority 3: Imagen (If preferred explicitly OR default and previous methods failed)
+        // Note: We skip this if preference was 'unsplash' (unless unsplash failed, see fallback below)
+        if (!buffer && (preferredSource === 'imagen' || preferredSource === 'news_source')) {
+           console.log(`[Asset] Preferred: Imagen generation...`);
            buffer = await generateImagenBuffer(item.prompt);
            if (buffer) {
              source = 'GEMINI_IMAGEN';
@@ -290,12 +308,13 @@ export async function POST(req: NextRequest) {
            }
         }
 
-        // Strategy C: Unsplash Fallback (If no buffer yet)
+        // Priority 4: Ultimate Fallback (Unsplash)
+        // If we wanted Imagen but it failed, or we wanted News Source but it failed, we fall back to Unsplash.
         if (!buffer && item.search_keyword) {
            console.log(`[Asset] Fallback to Unsplash: ${item.search_keyword}`);
            const unsplashData = await getUnsplashImageBuffer(item.search_keyword);
            if (unsplashData) {
-             buffer = Buffer.from(unsplashData.buffer); 
+             buffer = Buffer.from(unsplashData.buffer);
              source = 'UNSPLASH';
              credit = unsplashData.credit;
            }
@@ -316,19 +335,17 @@ export async function POST(req: NextRequest) {
             if (item.type === 'FEATURED') {
               featuredImageUrl = publicUrl;
             } else {
-              // Replace placeholder in text: [VISUAL_1] -> ![Alt](Url)
               const markdownImage = `\n\n![${item.caption}](${publicUrl} "${item.caption} | ${credit}")\n\n`;
               finalContent = finalContent.replace(`[${item.id}]`, markdownImage);
             }
           }
         } else {
-          // If all failed, remove placeholder cleanly
           finalContent = finalContent.replace(`[${item.id}]`, '');
         }
 
       } catch (err) {
         console.error(`Failed to process visual item ${item.id}:`, err);
-        finalContent = finalContent.replace(`[${item.id}]`, ''); // Cleanup on error
+        finalContent = finalContent.replace(`[${item.id}]`, ''); 
       }
     }
 
@@ -338,7 +355,6 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Author
     const generatedAuthorName = articleData.author_name || 'Rusty Tablet Staff';
     let authorId;
     const { data: existingAuthor } = await supabaseAdmin.from('authors').select('id').eq('name', generatedAuthorName).single();
@@ -351,17 +367,16 @@ export async function POST(req: NextRequest) {
       authorId = newAuthor?.id;
     }
 
-    // Save Post
     const { data: post, error: dbError } = await supabaseAdmin.from('posts').insert({
       title: articleData.title,
       slug: articleData.slug + '-' + Date.now().toString().slice(-4),
       excerpt: articleData.excerpt,
-      content: finalContent, // Now contains real image URLs
+      content: finalContent,
       author_id: authorId,
       is_published: true,
       category: articleData.category || 'Dispatches', 
       language: 'en',
-      featured_image: featuredImageUrl, // The uploaded URL
+      featured_image: featuredImageUrl, 
       source_url: sourceUrl,
       generation_mode: mode,
       nut_graph: articleData.nut_graph,
@@ -374,7 +389,6 @@ export async function POST(req: NextRequest) {
 
     if (dbError) throw dbError;
 
-    // Save Image Metadata (Bulk insert)
     if (processedImages.length > 0 && post) {
       const imageRecords = processedImages.map(img => ({
         post_id: post.id,
