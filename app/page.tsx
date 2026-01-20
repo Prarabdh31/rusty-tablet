@@ -351,6 +351,19 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
 
             {/* Newsletter */}
             <NewsletterForm />
+            
+            {/* About Widget (Manifesto) - Updated Link */}
+            <div className="bg-[#2C3E50] text-[#F5F5F1] p-8 rounded-sm shadow-lg relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-32 bg-[#B7410E] rounded-full blur-3xl opacity-20 -mr-16 -mt-16 transition-opacity group-hover:opacity-30"></div>
+              <h3 className="font-serif font-bold text-xl mb-4 text-[#B7410E] relative z-10">
+                <Link href="/about" className="hover:underline decoration-[#B7410E] underline-offset-4">Manifesto</Link>
+              </h3>
+              <p className="text-sm leading-relaxed opacity-80 font-sans relative z-10">
+                We believe in the weight of words. In an era of ephemeral feeds, Rusty Tablet is an automated monument to the permanent. 
+                <br/><br/>
+                Powered by Gemini AI, curated by algorithm, read by humans.
+              </p>
+            </div>
 
             {/* Categorized Article Lists (Dynamic) */}
             <div className="bg-[#E5E5E1]/30 p-4 border border-[#2C3E50]/5 rounded-sm">
@@ -406,7 +419,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
             <div>
               <h5 className="font-bold text-[#B7410E] uppercase tracking-wider text-xs mb-6">Company</h5>
               <ul className="space-y-3 text-sm text-[#F5F5F1]/80">
-                <li><Link href="#" className="hover:text-[#B7410E] transition-colors">About Us</Link></li>
+                <li><Link href="/about" className="hover:text-[#B7410E] transition-colors">About Us</Link></li>
+                <li><Link href="/contact" className="hover:text-[#B7410E] transition-colors">Contact Us</Link></li>
                 <li><Link href="#" className="hover:text-[#B7410E] transition-colors">Ghost Writers</Link></li>
                 <li><Link href="#" className="hover:text-[#B7410E] transition-colors">Advertise</Link></li>
                 <li><Link href="#" className="hover:text-[#B7410E] transition-colors">Privacy Policy</Link></li>
