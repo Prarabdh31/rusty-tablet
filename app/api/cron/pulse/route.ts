@@ -10,14 +10,28 @@ const supabaseAdmin = createClient(
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   
-  // NOTE: Vercel Cron requests include the header `Authorization: Bearer <CRON_SECRET>` automatically.
-  // Manual requests must mimic this.
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     console.error("Pulse Heartbeat: Unauthorized attempt.");
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
+    // FIX 1: Check Global Pause Switch (is_active)
+    const { data: config, error: configError } = await supabaseAdmin
+      .from('pulse_config')
+      .select('is_active')
+      .single();
+
+    if (configError || !config) {
+       console.warn("[Pulse] Config missing or error. Aborting.");
+       return NextResponse.json({ message: 'Config Error' });
+    }
+
+    if (!config.is_active) {
+       console.log("[Pulse] Engine is PAUSED. Skipping heartbeat.");
+       return NextResponse.json({ message: 'Engine Paused' });
+    }
+
     const now = new Date().toISOString();
     console.log(`[Pulse Heartbeat] Waking up at UTC: ${now}`);
     
@@ -73,7 +87,8 @@ export async function GET(req: NextRequest) {
         throw new Error(result.error || 'Phantom Engine failed');
       }
 
-      await supabaseAdmin.from('pulse_queue').update({ status: 'COMPLETED' }).eq('id', job.id);
+      // FIX 2: Delete Completed Jobs (Cleanup)
+      await supabaseAdmin.from('pulse_queue').delete().eq('id', job.id);
       
       await supabaseAdmin.from('pulse_logs').insert({
         queue_id: job.id,
