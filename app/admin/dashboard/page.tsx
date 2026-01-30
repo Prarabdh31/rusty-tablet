@@ -6,10 +6,11 @@ import {
   Loader2, Terminal, CheckCircle, AlertCircle, FileText, Rss, Settings, 
   Send, ArrowRight, List, Edit2, Eye, EyeOff, Trash2, X, Save, Newspaper, 
   Search, Filter, Ghost, Activity, Aperture, BookOpen, Calendar, RefreshCw, Play, Clock, 
-  ChevronDown, ChevronUp, History, Pause, Plus, Minus
+  ChevronDown, ChevronUp, History, Pause, Plus, Minus, Database, CloudLightning
 } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 import { formatDistanceToNow } from 'date-fns';
+import AsyncSelect from '@/components/ui/AsyncSelect'; 
 
 // --- CONFIGURATION OPTIONS ---
 const REGIONS = ['US', 'IN', 'UK', 'JP', 'Global', 'EU', 'Mars Colony'];
@@ -56,9 +57,18 @@ export default function AdminDashboard() {
   // Inputs
   const [rssUrl, setRssUrl] = useState(RSS_FEEDS[0].url);
   const [contentInput, setContentInput] = useState('');
-  const [newsMode, setNewsMode] = useState<'AUTOMATIC' | 'TAILORED'>('AUTOMATIC');
-  const [newsCategory, setNewsCategory] = useState('Technology');
+  
+  // NewsAPI V2 Inputs
+  const [newsV2Mode, setNewsV2Mode] = useState<'TARGETED' | 'DEEP_DIVE' | 'BREAKING'>('TARGETED');
+  const [newsKeyword, setNewsKeyword] = useState('');
+  const [newsSort, setNewsSort] = useState<'RELEVANCE' | 'IMPORTANCE' | 'VIRALITY' | 'DATE'>('IMPORTANCE');
+  const [newsCategoryUri, setNewsCategoryUri] = useState('');
+  const [newsConceptUri, setNewsConceptUri] = useState('');
+  const [newsLocationUri, setNewsLocationUri] = useState('');
   const [newsTopic, setNewsTopic] = useState('');
+  
+  // Hydration State
+  const [hydrating, setHydrating] = useState<string | null>(null);
 
   // Settings
   const [region, setRegion] = useState('Global');
@@ -93,12 +103,32 @@ export default function AdminDashboard() {
   );
 
   // --- HANDLERS ---
-  // Helper to convert UTC string to Local datetime-local value (YYYY-MM-DDTHH:mm)
   const toLocalISOString = (dateString: string) => {
     const date = new Date(dateString);
     const offsetMs = date.getTimezoneOffset() * 60 * 1000;
     const localDate = new Date(date.getTime() - offsetMs);
     return localDate.toISOString().slice(0, 16);
+  };
+
+  const handleHydrate = async (type: 'categories' | 'concepts' | 'locations') => {
+    if (!authKey) return alert('Security Clearance Required');
+    setHydrating(type);
+    try {
+      const res = await fetch(`/api/admin/news/hydrate/${type}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authKey}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Hydration Complete. Processed: ${data.processed} items.`);
+      } else {
+        alert(`Hydration Failed: ${data.error || data.message}`);
+      }
+    } catch (e) {
+      alert('Error connecting to hydration service');
+    } finally {
+      setHydrating(null);
+    }
   };
 
   const handleGenerate = async (e: React.FormEvent, overridePayload?: any) => {
@@ -108,14 +138,49 @@ export default function AdminDashboard() {
     setGenResult(null);
 
     try {
+      // Logic to strictly scope parameters based on sub-mode to prevent state pollution
+      const getScopedNewsParams = () => {
+        if (mode !== 'NEWS_API_AI') return {};
+        
+        const base = { news_v2_mode: newsV2Mode };
+        
+        if (newsV2Mode === 'TARGETED') {
+          return {
+            ...base,
+            news_keyword: newsKeyword || undefined,
+            news_category_uri: newsCategoryUri || undefined,
+            news_concept_uri: newsConceptUri || undefined,
+            news_location_uri: newsLocationUri || undefined,
+            news_sort: newsSort
+          };
+        }
+        if (newsV2Mode === 'DEEP_DIVE') {
+          return {
+            ...base,
+            news_keyword: newsKeyword || undefined,
+            news_concept_uri: newsConceptUri || undefined,
+            news_location_uri: newsLocationUri || undefined,
+            news_category_uri: newsCategoryUri || undefined
+          };
+        }
+        if (newsV2Mode === 'BREAKING') {
+          return {
+            ...base,
+            news_category_uri: newsCategoryUri || undefined,
+            news_location_uri: newsLocationUri || undefined
+          };
+        }
+        return base;
+      };
+
       const payload = overridePayload || {
         mode,
         config: {
           rss_url: mode === 'SPECIFIC_RSS' ? rssUrl : undefined,
           content_input: mode === 'MANUAL' ? contentInput : undefined,
-          news_mode: mode === 'NEWS_API_AI' ? newsMode : undefined,
-          news_category: mode === 'NEWS_API_AI' ? newsCategory : undefined,
-          news_topic: mode === 'NEWS_API_AI' ? newsTopic : undefined,
+          
+          ...getScopedNewsParams(),
+          
           target_region: region,
           article_sentiment: selectedSentiments.join(', '),
           complexity,
@@ -138,7 +203,7 @@ export default function AdminDashboard() {
 
       setGenResult(data);
       if (authKey && activeModule === 'LENS') fetchArticles();
-      if (activeModule === 'PULSE') fetchPulseData(); // Refresh logs if triggered via Pulse
+      if (activeModule === 'PULSE') fetchPulseData(); 
       
       return data;
     } catch (err: any) {
@@ -171,7 +236,6 @@ export default function AdminDashboard() {
     if (!authKey) return;
     setPulseLoading(true);
     try {
-      // 1. Config
       const resConfig = await fetch('/api/admin/pulse/config', {
          headers: { 'Authorization': `Bearer ${authKey}` }
       });
@@ -195,7 +259,6 @@ export default function AdminDashboard() {
         });
       }
 
-      // 2. Queue
       const resQueue = await fetch('/api/admin/pulse/queue', {
          headers: { 'Authorization': `Bearer ${authKey}` }
       });
@@ -204,7 +267,6 @@ export default function AdminDashboard() {
         setPulseQueue(json.queue || []);
       }
 
-      // 3. Logs
       const resLogs = await fetch('/api/admin/pulse/logs', {
          headers: { 'Authorization': `Bearer ${authKey}` }
       });
@@ -263,11 +325,7 @@ export default function AdminDashboard() {
             }
         }, 1000);
       } else alert('Planning Failed.');
-    } catch (e) {
-       alert('Error generating schedule');
-    } finally {
-      setIsPlanning(false);
-    }
+    } catch (e) { alert('Error generating schedule'); } finally { setIsPlanning(false); }
   };
 
   const deletePulseJob = async (id: string) => {
@@ -277,72 +335,45 @@ export default function AdminDashboard() {
         method: 'DELETE', headers: { 'Authorization': `Bearer ${authKey}` }
       });
       fetchPulseData();
-    } catch (e) {
-      alert('Error deleting job');
-    }
+    } catch (e) { alert('Error deleting job'); }
   };
 
-  const runPulseJob = async (id: string, _unusedParams?: any) => {
+  const runPulseJob = async (id: string, params: any) => {
     if (!authKey) return alert('Security Clearance Required');
-    
-    // Optimistic update
-    setPulseQueue(prev => prev.map(job => job.id === id ? { ...job, status: 'PROCESSING' } : job));
-
     try {
-      // FIX: Use the atomic Run API instead of local handleGenerate
-      const response = await fetch('/api/admin/pulse/run', {
+      setPulseQueue(prev => prev.map(job => job.id === id ? { ...job, status: 'PROCESSING' } : job));
+      const res = await fetch('/api/admin/pulse/run', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authKey}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` },
         body: JSON.stringify({ id })
       });
-
-      const json = await response.json();
-
-      if (response.ok) {
-         fetchPulseData(); // Refresh queue and logs
-      } else {
-         throw new Error(json.error || 'Run failed');
-      }
-    } catch (e: any) {
-      alert(`Failed to run job: ${e.message}`);
-      fetchPulseData(); // Revert state
-    }
+      const json = await res.json();
+      if (res.ok) { fetchPulseData(); } else { throw new Error(json.error || 'Run failed'); }
+    } catch (e: any) { alert(`Failed to run job: ${e.message}`); fetchPulseData(); }
   };
 
   const handleJobEditSave = async (e: React.FormEvent) => {
      e.preventDefault();
      if (!authKey) return alert('Security Clearance Required');
-     
      try {
        const res = await fetch('/api/admin/pulse/queue', {
          method: 'PATCH',
          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` },
          body: JSON.stringify({
             id: editingJob.id,
-            // Convert local time back to ISO UTC string for DB
             scheduled_at: new Date(editingJob.scheduled_at).toISOString(),
             job_params: editingJob.job_params
          })
        });
-
-       if (res.ok) {
-         setEditingJob(null);
-         fetchPulseData();
-       } else {
-         alert('Update failed');
-       }
-     } catch(e) {
-       alert('Error updating job');
-     }
+       if (res.ok) { setEditingJob(null); fetchPulseData(); } else { alert('Update failed'); }
+     } catch(e) { alert('Error updating job'); }
   };
 
-  // --- SHARED UI HELPERS ---
-  const toggleSentiment = (s: string) => {
-    setSelectedSentiments(prev => prev.includes(s) ? prev.filter(item => item !== s) : [...prev, s]);
-  };
+  // --- HELPERS ---
+  const toggleSentiment = (s: string) => setSelectedSentiments(prev => prev.includes(s) ? prev.filter(item => item !== s) : [...prev, s]);
+  const handleAddSentiment = (s: string) => { if (!pulseConfig) return; const current = pulseConfig.sentiment_weights || {}; if (current[s] === undefined) { setPulseConfig({...pulseConfig, sentiment_weights: { ...current, [s]: 10 } }); } };
+  const handleRemoveSentiment = (s: string) => { if (!pulseConfig) return; const current = { ...pulseConfig.sentiment_weights }; delete current[s]; setPulseConfig({...pulseConfig, sentiment_weights: current }); };
+  const formatIST = (dateString: string) => { try { return new Date(dateString).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true }) + " IST"; } catch { return dateString; } };
   
   const filteredArticles = articles.filter(article => {
     const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase());
@@ -351,60 +382,20 @@ export default function AdminDashboard() {
   });
   const uniqueCategories = ['All', ...Array.from(new Set(articles.map(a => a.category))).filter(Boolean).sort()];
 
-  // Manager Actions
   const toggleVisibility = async (id: string, currentStatus: boolean) => {
     if (!authKey) return alert('Security Clearance Required.');
     setArticles(prev => prev.map(a => a.id === id ? { ...a, is_published: !currentStatus } : a));
-    try {
-      await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id, is_published: !currentStatus }) });
-    } catch (error) { alert('Update failed'); fetchArticles(); }
+    try { await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id, is_published: !currentStatus }) }); } catch (error) { alert('Update failed'); fetchArticles(); }
   };
-
   const deleteArticle = async (id: string) => {
     if (!authKey) return alert('Security Clearance Required.');
     if (!confirm('Delete permanently?')) return;
-    try {
-      await fetch(`/api/admin/manage?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authKey}` } });
-      fetchArticles();
-    } catch (error) { alert('Delete failed'); }
+    try { await fetch(`/api/admin/manage?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authKey}` } }); fetchArticles(); } catch (error) { alert('Delete failed'); }
   };
-
   const handleEditSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authKey) return alert('Security Clearance Required.');
-    try {
-      const res = await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id: editingArticle.id, title: editingArticle.title, content: editingArticle.content, category: editingArticle.category }) });
-      if (!res.ok) throw new Error();
-      setEditingArticle(null);
-      fetchArticles();
-    } catch { alert('Save failed'); }
-  };
-
-  const handleAddSentiment = (s: string) => {
-     if (!pulseConfig) return;
-     const current = pulseConfig.sentiment_weights || {};
-     if (current[s] === undefined) {
-        setPulseConfig({...pulseConfig, sentiment_weights: { ...current, [s]: 10 } });
-     }
-  };
-  const handleRemoveSentiment = (s: string) => {
-    if (!pulseConfig) return;
-    const current = { ...pulseConfig.sentiment_weights };
-    delete current[s];
-    setPulseConfig({...pulseConfig, sentiment_weights: current });
-  };
-  
-  // Helper for IST Time Display (Client side)
-  const formatIST = (dateString: string) => {
-    try {
-      // Use toLocaleString to force IST
-      return new Date(dateString).toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true
-      }) + " IST";
-    } catch {
-      return dateString;
-    }
+    try { const res = await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id: editingArticle.id, title: editingArticle.title, content: editingArticle.content, category: editingArticle.category }) }); if (!res.ok) throw new Error(); setEditingArticle(null); fetchArticles(); } catch { alert('Save failed'); }
   };
 
   const WeightSlider = ({ category, label, weights, onChange, allowAdd = false }: any) => {
@@ -413,29 +404,16 @@ export default function AdminDashboard() {
       <div className="p-5 bg-[#1E293B] rounded-sm border border-[#2C3E50] mb-4">
          <div className="flex justify-between items-center mb-6 border-b border-[#2C3E50] pb-2">
             <span className="text-xs uppercase text-[#B7410E] font-bold tracking-widest">{label}</span>
-            <span className="text-[10px] text-[#64748B] font-mono">
-               TOTAL: {Object.values(weights as Record<string, number>).reduce((a, b) => a + b, 0)}%
-            </span>
+            <span className="text-[10px] text-[#64748B] font-mono">TOTAL: {Object.values(weights as Record<string, number>).reduce((a, b) => a + b, 0)}%</span>
          </div>
          <div className="space-y-6">
             {Object.keys(weights).map((key: string) => (
               <div key={key} className="group">
                 <div className="flex justify-between text-xs text-[#94A3B8] mb-2 uppercase font-bold tracking-wider items-center">
                   <span>{key.replace(/_/g, ' ')}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[#B7410E] font-mono">{weights[key]}%</span>
-                    {allowAdd && (
-                        <button onClick={() => handleRemoveSentiment(key)} className="text-[#64748B] hover:text-red-500"><X size={12}/></button>
-                    )}
-                  </div>
+                  <div className="flex items-center gap-2"><span className="text-[#B7410E] font-mono">{weights[key]}%</span>{allowAdd && (<button onClick={() => handleRemoveSentiment(key)} className="text-[#64748B] hover:text-red-500"><X size={12}/></button>)}</div>
                 </div>
-                <input 
-                  type="range" 
-                  min="0" max="100" step="1"
-                  value={weights[key]} 
-                  onChange={(e) => onChange({...weights, [key]: Number(e.target.value)})} 
-                  className="w-full h-1.5 bg-[#0F172A] rounded-lg appearance-none cursor-pointer accent-[#B7410E] hover:accent-[#F59E0B] transition-all" 
-                />
+                <input type="range" min="0" max="100" step="1" value={weights[key]} onChange={(e) => onChange({...weights, [key]: Number(e.target.value)})} className="w-full h-1.5 bg-[#0F172A] rounded-lg appearance-none cursor-pointer accent-[#B7410E] hover:accent-[#F59E0B] transition-all" />
               </div>
             ))}
          </div>
@@ -444,9 +422,7 @@ export default function AdminDashboard() {
                  <p className="text-[10px] text-[#64748B] mb-2 uppercase font-bold">Add to Mix:</p>
                  <div className="flex flex-wrap gap-2">
                      {SENTIMENTS.filter(s => !weights[s]).map(s => (
-                         <button key={s} onClick={() => handleAddSentiment(s)} className="text-[10px] border border-[#2C3E50] px-2 py-1 rounded-sm text-[#64748B] hover:text-[#B7410E] hover:border-[#B7410E] transition-colors uppercase">
-                             + {s}
-                         </button>
+                         <button key={s} onClick={() => handleAddSentiment(s)} className="text-[10px] border border-[#2C3E50] px-2 py-1 rounded-sm text-[#64748B] hover:text-[#B7410E] hover:border-[#B7410E] transition-colors uppercase">+ {s}</button>
                      ))}
                  </div>
              </div>
@@ -506,12 +482,52 @@ export default function AdminDashboard() {
                       <button key={m} onClick={() => setMode(m as any)} className={`py-3 px-4 text-xs font-bold uppercase tracking-wider border rounded-sm transition-all ${mode === m ? 'bg-[#1E293B] text-[#B7410E] border-[#B7410E]' : 'bg-transparent text-[#64748B] border-[#2C3E50] hover:text-[#F5F5F1] hover:border-[#64748B]'}`}>{m.replace(/_/g, ' ')}</button>
                    ))}
                 </div>
+
                 {/* Dynamic Inputs */}
                 <div className="bg-[#1E293B] p-6 border border-[#2C3E50] rounded-sm">
                    {mode === 'MANUAL' && ( <textarea value={contentInput} onChange={(e) => setContentInput(e.target.value)} rows={6} placeholder="Inject raw data stream..." className="w-full bg-[#0F172A] border border-[#2C3E50] p-4 text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none font-mono rounded-sm placeholder-[#64748B]/50" /> )}
                    {mode === 'SPECIFIC_RSS' && ( <div className="space-y-4"><select value={rssUrl} onChange={(e) => setRssUrl(e.target.value)} className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none font-mono rounded-sm">{RSS_FEEDS.map(f => <option key={f.url} value={f.url}>{f.label}</option>)}</select><input type="text" value={newsTopic} onChange={(e) => setNewsTopic(e.target.value)} placeholder="Optional Keyword Filter..." className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none font-mono rounded-sm placeholder-[#64748B]/50" /></div> )}
-                   {mode === 'NEWS_API_AI' && ( <div className="space-y-4"><div className="flex gap-4 mb-4"><button onClick={() => setNewsMode('AUTOMATIC')} className={`text-xs font-bold uppercase ${newsMode === 'AUTOMATIC' ? 'text-[#B7410E]' : 'text-[#64748B]'}`}>Automatic</button><button onClick={() => setNewsMode('TAILORED')} className={`text-xs font-bold uppercase ${newsMode === 'TAILORED' ? 'text-[#B7410E]' : 'text-[#64748B]'}`}>Tailored</button></div>{newsMode === 'AUTOMATIC' ? (<select value={newsCategory} onChange={(e) => setNewsCategory(e.target.value)} className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] rounded-sm">{NEWS_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}</select>) : (<input type="text" value={newsTopic} onChange={(e) => setNewsTopic(e.target.value)} placeholder="Target Topic..." className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] rounded-sm placeholder-[#64748B]/50" />)}</div> )}
+                   {mode === 'NEWS_API_AI' && (
+                      <div className="space-y-4">
+                         <div className="flex gap-4 mb-4">
+                            <button onClick={() => setNewsV2Mode('TARGETED')} className={`text-xs font-bold uppercase ${newsV2Mode === 'TARGETED' ? 'text-[#B7410E]' : 'text-[#64748B]'}`}>Targeted</button>
+                            <button onClick={() => setNewsV2Mode('DEEP_DIVE')} className={`text-xs font-bold uppercase ${newsV2Mode === 'DEEP_DIVE' ? 'text-[#B7410E]' : 'text-[#64748B]'}`}>Deep Dive</button>
+                            <button onClick={() => setNewsV2Mode('BREAKING')} className={`text-xs font-bold uppercase ${newsV2Mode === 'BREAKING' ? 'text-[#B7410E]' : 'text-[#64748B]'}`}>Breaking</button>
+                         </div>
+                         {/* Dynamic Inputs for NewsAPI V2 Sub-modes */}
+                         {newsV2Mode === 'TARGETED' && (
+                             <div className="grid grid-cols-2 gap-4">
+                                <input type="text" value={newsKeyword} onChange={(e) => setNewsKeyword(e.target.value)} placeholder="Keyword (e.g. Nvidia)" className="col-span-2 w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none rounded-sm placeholder-[#64748B]/50" />
+                                <div className="col-span-2 space-y-4">
+                                   <AsyncSelect label="Category" type="CATEGORY" value={newsCategoryUri} onChange={setNewsCategoryUri} placeholder="Search Categories..." />
+                                   <AsyncSelect label="Concept" type="CONCEPT" value={newsConceptUri} onChange={setNewsConceptUri} placeholder="Search Concepts (e.g. Elon Musk)..." />
+                                   <AsyncSelect label="Source Location" type="LOCATION" value={newsLocationUri} onChange={setNewsLocationUri} placeholder="Search Location..." />
+                                </div>
+                                <select value={newsSort} onChange={(e) => setNewsSort(e.target.value as any)} className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] rounded-sm col-span-2">
+                                   <option value="IMPORTANCE">Sort by Importance</option>
+                                   <option value="VIRALITY">Sort by Virality</option>
+                                   <option value="RELEVANCE">Sort by Relevance</option>
+                                   <option value="DATE">Sort by Date</option>
+                                </select>
+                             </div>
+                         )}
+                         {newsV2Mode === 'DEEP_DIVE' && (
+                             <div className="space-y-4">
+                                <input type="text" value={newsKeyword} onChange={(e) => setNewsKeyword(e.target.value)} placeholder="Event Topic (e.g. Election)" className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none rounded-sm placeholder-[#64748B]/50" />
+                                <AsyncSelect label="Concept (Optional)" type="CONCEPT" value={newsConceptUri} onChange={setNewsConceptUri} placeholder="Search Concepts..." />
+                                <AsyncSelect label="Event Location (Optional)" type="LOCATION" value={newsLocationUri} onChange={setNewsLocationUri} placeholder="Search Event Location..." />
+                             </div>
+                         )}
+                         {newsV2Mode === 'BREAKING' && (
+                             <div className="space-y-4">
+                                <AsyncSelect label="Category (Optional)" type="CATEGORY" value={newsCategoryUri} onChange={setNewsCategoryUri} placeholder="Filter by Category..." />
+                                <AsyncSelect label="Source Location (Optional)" type="LOCATION" value={newsLocationUri} onChange={setNewsLocationUri} placeholder="Filter by Region..." />
+                             </div>
+                         )}
+                      </div>
+                   )}
                 </div>
+
                 {/* Configuration Matrix */}
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-[#B7410E] uppercase tracking-widest mb-4 flex items-center gap-2"><span className="w-2 h-2 bg-[#B7410E] rounded-full"></span> Parameter Matrix</h4>
@@ -531,6 +547,24 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 </div>
+                
+                {/* Hydration Panel */}
+                <div className="p-4 border border-[#2C3E50] rounded-sm bg-[#1E293B]">
+                   <label className="text-[10px] uppercase text-[#64748B] font-bold mb-3 block flex items-center gap-2"><Database size={12} /> Knowledge Base Hydration</label>
+                   <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => handleHydrate('categories')} disabled={!!hydrating} className="py-2 text-[10px] font-bold uppercase border border-[#2C3E50] hover:border-[#B7410E] hover:text-[#B7410E] rounded-sm transition-colors flex justify-center items-center gap-2">
+                        {hydrating === 'categories' ? <Loader2 size={12} className="animate-spin" /> : <CloudLightning size={12} />} Process Categories
+                      </button>
+                      <button onClick={() => handleHydrate('concepts')} disabled={!!hydrating} className="py-2 text-[10px] font-bold uppercase border border-[#2C3E50] hover:border-[#B7410E] hover:text-[#B7410E] rounded-sm transition-colors flex justify-center items-center gap-2">
+                        {hydrating === 'concepts' ? <Loader2 size={12} className="animate-spin" /> : <CloudLightning size={12} />} Process Concepts
+                      </button>
+                      <button onClick={() => handleHydrate('locations')} disabled={!!hydrating} className="py-2 text-[10px] font-bold uppercase border border-[#2C3E50] hover:border-[#B7410E] hover:text-[#B7410E] rounded-sm transition-colors flex justify-center items-center gap-2">
+                        {hydrating === 'locations' ? <Loader2 size={12} className="animate-spin" /> : <CloudLightning size={12} />} Process Locations
+                      </button>
+                   </div>
+                   <p className="text-[9px] text-[#64748B] mt-2 italic">* Processes pending items from the Prefix Bucket.</p>
+                </div>
+
                 <div className="flex gap-6 text-xs font-mono text-[#64748B]">
                   <label className="flex items-center gap-2 cursor-pointer hover:text-[#F5F5F1]"><input type="checkbox" checked={includeSidebar} onChange={e => setIncludeSidebar(e.target.checked)} className="accent-[#B7410E]" /> GEN_SIDEBAR</label>
                   <label className="flex items-center gap-2 cursor-pointer hover:text-[#F5F5F1]"><input type="checkbox" checked={generateSocial} onChange={e => setGenerateSocial(e.target.checked)} className="accent-[#B7410E]" /> GEN_SOCIAL</label>
@@ -605,7 +639,7 @@ export default function AdminDashboard() {
                       pulseQueue.map((job) => (
                         <div key={job.id} className="bg-[#1E293B] border border-[#2C3E50] p-4 rounded-sm flex justify-between items-start group hover:border-[#B7410E]/50 transition-colors">
                            <div className="flex-1">
-                              <div className="text-[#B7410E] font-mono text-xs mb-1" suppressHydrationWarning>{formatIST(job.scheduled_at)}</div>
+                              <div className="text-[#B7410E] font-mono text-xs mb-1" suppressHydrationWarning>{new Date(job.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                               <div className="text-[#F5F5F1] text-sm font-bold">{job.job_params.mode.replace(/_/g, ' ')}</div>
                               <div className="text-[#64748B] text-[10px] uppercase mt-1">
                                 {job.job_params.config.target_region} • {job.job_params.config.article_sentiment}
@@ -633,7 +667,7 @@ export default function AdminDashboard() {
                            <tr><td colSpan={3} className="text-center py-8 text-[#64748B] italic">No history found.</td></tr>
                          ) : pulseLogs.map((log) => (
                            <tr key={log.id} className="hover:bg-[#2C3E50]/50 transition-colors">
-                              <td className="px-4 py-3 font-mono text-[#64748B]" suppressHydrationWarning>{formatIST(log.executed_at)}</td>
+                              <td className="px-4 py-3 font-mono text-[#64748B]" suppressHydrationWarning>{new Date(log.executed_at).toLocaleString()}</td>
                               <td className="px-4 py-3"><span className={`px-2 py-1 rounded-full text-[10px] font-bold ${log.status === 'SUCCESS' ? 'bg-green-900/20 text-green-500' : 'bg-red-900/20 text-red-500'}`}>{log.status}</span></td>
                               <td className="px-4 py-3 text-[#F5F5F1] truncate max-w-md">{log.result_summary?.title || log.result_summary?.error || JSON.stringify(log.result_summary)}</td>
                            </tr>
@@ -718,6 +752,7 @@ export default function AdminDashboard() {
                 </div>
              </div>
           )}
+
       </div>
       </div>
 
@@ -754,72 +789,6 @@ export default function AdminDashboard() {
               </div>
            </div>
         </div>
-      )}
-
-      {/* --- JOB EDIT MODAL --- */}
-      {editingJob && (
-          <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-            <div className="bg-[#1E293B] w-full max-w-xl rounded-sm border border-[#2C3E50] shadow-2xl">
-              <div className="bg-[#0F172A] p-4 flex justify-between items-center border-b border-[#2C3E50]">
-                <h3 className="font-bold uppercase tracking-wider text-sm flex items-center gap-2 text-[#F5F5F1]"><Settings size={16} /> Edit Queue</h3>
-                <button onClick={() => setEditingJob(null)} className="text-[#64748B] hover:text-[#B7410E]"><X size={20} /></button>
-              </div>
-              <form onSubmit={handleJobEditSave} className="p-6 space-y-6">
-                <div>
-                   <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Scheduled Time</label>
-                   <input 
-                      type="datetime-local" 
-                      value={toLocalISOString(editingJob.scheduled_at)}
-                      onChange={e => setEditingJob({...editingJob, scheduled_at: new Date(e.target.value).toISOString()})}
-                      className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                   />
-                </div>
-                <div>
-                   <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Region</label>
-                   <select 
-                      value={editingJob.job_params.config.target_region} 
-                      onChange={e => setEditingJob({...editingJob, job_params: {...editingJob.job_params, config: {...editingJob.job_params.config, target_region: e.target.value}}})}
-                      className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                   >
-                      {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                   </select>
-                </div>
-                <div>
-                   <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Sentiment</label>
-                   <select 
-                      value={editingJob.job_params.config.article_sentiment} 
-                      onChange={e => setEditingJob({...editingJob, job_params: {...editingJob.job_params, config: {...editingJob.job_params.config, article_sentiment: e.target.value}}})}
-                      className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                   >
-                      {SENTIMENTS.map(s => <option key={s} value={s}>{s}</option>)}
-                   </select>
-                </div>
-                <div>
-                   <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Complexity</label>
-                   <select 
-                      value={editingJob.job_params.config.complexity} 
-                      onChange={e => setEditingJob({...editingJob, job_params: {...editingJob.job_params, config: {...editingJob.job_params.config, complexity: e.target.value}}})}
-                      className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                   >
-                      {COMPLEXITIES.map(c => <option key={c} value={c}>{c}</option>)}
-                   </select>
-                </div>
-                <div>
-                   <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Word Count</label>
-                   <input 
-                      type="number" 
-                      value={editingJob.job_params.config.word_count} 
-                      onChange={e => setEditingJob({...editingJob, job_params: {...editingJob.job_params, config: {...editingJob.job_params.config, word_count: Number(e.target.value)}}})}
-                      className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                   />
-                </div>
-                <div className="flex justify-end gap-4 pt-4">
-                   <button type="button" onClick={() => setEditingJob(null)} className="px-4 py-2 text-xs font-bold text-[#64748B] hover:text-[#F5F5F1]">CANCEL</button>
-                   <button type="submit" className="px-6 py-2 bg-[#B7410E] text-white text-xs font-bold uppercase rounded-sm hover:bg-[#8F330B]">UPDATE</button>
-                </div>
-              </form>
-            </div>
-          </div>
       )}
 
       {/* --- EDIT MODAL (Dark Mode) --- */}
@@ -879,6 +848,43 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+      {/* --- PULSE JOB EDIT MODAL --- */}
+      {editingJob && (
+          <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+            <div className="bg-[#1E293B] w-full max-w-xl rounded-sm border border-[#2C3E50] shadow-2xl">
+              <div className="bg-[#0F172A] p-4 flex justify-between items-center border-b border-[#2C3E50]">
+                <h3 className="font-bold uppercase tracking-wider text-sm flex items-center gap-2 text-[#F5F5F1]"><Settings size={16} /> Edit Queue</h3>
+                <button onClick={() => setEditingJob(null)} className="text-[#64748B] hover:text-[#B7410E]"><X size={20} /></button>
+              </div>
+              <form onSubmit={handleJobEditSave} className="p-6 space-y-6">
+                <div>
+                   <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Scheduled Time</label>
+                   <input 
+                      type="datetime-local" 
+                      value={toLocalISOString(editingJob.scheduled_at)}
+                      onChange={e => setEditingJob({...editingJob, scheduled_at: new Date(e.target.value).toISOString()})}
+                      className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
+                   />
+                </div>
+                <div>
+                   <label className="block text-[10px] font-bold uppercase text-[#64748B] mb-1">Region</label>
+                   <select 
+                      value={editingJob.job_params.config.target_region} 
+                      onChange={e => setEditingJob({...editingJob, job_params: {...editingJob.job_params, config: {...editingJob.job_params.config, target_region: e.target.value}}})}
+                      className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
+                   >
+                      {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                   </select>
+                </div>
+                <div className="flex justify-end gap-4 pt-4">
+                   <button type="button" onClick={() => setEditingJob(null)} className="px-4 py-2 text-xs font-bold text-[#64748B] hover:text-[#F5F5F1]">CANCEL</button>
+                   <button type="submit" className="px-6 py-2 bg-[#B7410E] text-white text-xs font-bold uppercase rounded-sm hover:bg-[#8F330B]">UPDATE</button>
+                </div>
+              </form>
+            </div>
+          </div>
+      )}
 
     </main>
   );

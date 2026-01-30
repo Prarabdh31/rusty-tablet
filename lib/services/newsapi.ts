@@ -1,128 +1,218 @@
-const EVENT_REGISTRY_ENDPOINT = 'http://eventregistry.org/api/v1/minuteStreamArticles';
-
-// Mapping Rusty Tablet Regions to Event Registry Location URIs
-const REGION_MAP: Record<string, string> = {
-  'US': 'http://en.wikipedia.org/wiki/United_States',
-  'IN': 'http://en.wikipedia.org/wiki/India',
-  'UK': 'http://en.wikipedia.org/wiki/United_Kingdom',
-  'JP': 'http://en.wikipedia.org/wiki/Japan',
-  'EU': 'http://en.wikipedia.org/wiki/Europe',
-  'Global': '' // No location filter
-};
-
-// Mapping Categories to DMOZ Categories (Event Registry standard)
-const CATEGORY_MAP: Record<string, string> = {
-  'Business': 'dmoz/Business',
-  'Technology': 'dmoz/Computers',
-  'Science': 'dmoz/Science',
-  'Health': 'dmoz/Health',
-  'Politics': 'dmoz/Society/Politics',
-  'Entertainment': 'dmoz/Arts/Entertainment',
-  'Sports': 'dmoz/Sports'
-};
+const BASE_URL = 'http://eventregistry.org/api/v1';
 
 interface NewsAPIOptions {
-  mode: 'AUTOMATIC' | 'TAILORED';
-  region?: string;
-  category?: string;
-  topic?: string;
+  // Mode Selection
+  mode: 'TARGETED' | 'DEEP_DIVE' | 'BREAKING';
+  
+  // Targeted / Deep Dive Params
+  keyword?: string;
+  categoryUri?: string;
+  locationUri?: string;
+  conceptUri?: string;
+  
+  // Sorting & Filters
+  sortFocus?: 'RELEVANCE' | 'IMPORTANCE' | 'VIRALITY' | 'DATE';
+  ignoreSource?: string[];
+  dateStart?: string;
 }
 
 export interface NewsResult {
   title: string;
   body: string;
-  url: string;
+  url?: string;
   source: string;
   image?: string;
+  date: string;
+  is_event_summary?: boolean;
 }
+
+// Helper to map our Sort enums to Event Registry API values
+const getSortBy = (focus?: string) => {
+  switch (focus) {
+    case 'IMPORTANCE': return 'sourceImportance';
+    case 'VIRALITY': return 'socialScore';
+    case 'RELEVANCE': return 'rel';
+    default: return 'date';
+  }
+};
 
 export async function fetchNewsContext(options: NewsAPIOptions): Promise<NewsResult | null> {
   const apiKey = process.env.NEWSAPI_AI_KEY;
-
   if (!apiKey) {
     console.error("❌ NEWSAPI_AI_KEY is missing.");
     return null;
   }
 
-  // Base Body - Common settings
-  const requestBody: any = {
-    apiKey: apiKey,
-    articleBodyLen: -1, // Full body
-    includeArticleImage: true,
-    includeArticleConcepts: true, // Helps with context
-    includeSourceTitle: true,
-    recentActivityArticlesMaxArticleCount: 50, // Limit to save tokens (1 token = 100 arts)
-    // Filters
-    lang: ["eng"],
-    isDuplicateFilter: "skipDuplicates",
-    hasBody: true 
-  };
-
-  // --- LOGIC BRANCHING ---
-
-  if (options.mode === 'TAILORED' && options.topic) {
-    // Strategy: Wide time window (48h) to find specific topic
-    requestBody.recentActivityArticlesUpdatesAfterMinsAgo = 2880; 
-    requestBody.keyword = options.topic;
-    requestBody.keywordOper = "or";
-    requestBody.keywordLoc = "title"; // Strict: Topic must be in title for relevance
-  } 
-  else {
-    // Strategy: Narrow time window (24h) for general breaking news
-    // Defaulting to AUTOMATIC behavior
-    requestBody.recentActivityArticlesUpdatesAfterMinsAgo = 1440; // Last 24 hours
-    
-    // Apply Region Filter if specific
-    if (options.region && REGION_MAP[options.region]) {
-      requestBody.sourceLocationUri = [REGION_MAP[options.region]];
-    }
-
-    // Apply Category Filter
-    if (options.category && CATEGORY_MAP[options.category]) {
-      requestBody.categoryUri = [CATEGORY_MAP[options.category]];
-    }
-  }
-
   try {
-    console.log(`📡 Calling Event Registry (${options.mode})...`);
-    
-    const response = await fetch(EVENT_REGISTRY_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    });
+    console.log(`[NewsAPI] Fetching in mode: ${options.mode}`);
 
-    if (!response.ok) {
-      console.error(`NewsAPI Error: ${response.status} ${response.statusText}`);
-      return null;
+    // --- MODE C: BREAKING (Minute Stream) ---
+    if (options.mode === 'BREAKING') {
+      const response = await fetch(`${BASE_URL}/minuteStreamArticles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          recentActivityArticlesMaxArticleCount: 50,
+          recentActivityArticlesUpdatesAfterMinsAgo: 60, // Last hour
+          articleBodyLen: -1,
+          includeArticleImage: true,
+          lang: ["eng"],
+          // Optional Filters if provided
+          categoryUri: options.categoryUri ? [options.categoryUri] : undefined,
+          sourceLocationUri: options.locationUri ? [options.locationUri] : undefined
+        })
+      });
+      
+      const data = await response.json();
+      const article = data.recentActivityArticles?.activity?.[0];
+      
+      if (!article) return null;
+      
+      return {
+        title: article.title,
+        body: article.body,
+        url: article.url,
+        source: article.source?.title || 'Breaking Wire',
+        image: article.image,
+        date: article.dateTimePub
+      };
     }
 
-    const data = await response.json();
-    
-    // The endpoint returns { recentActivityArticles: { activity: [...] } }
-    const articles = data.recentActivityArticles?.activity;
+    // --- MODE B: DEEP-DIVE (Events Cluster) ---
+    if (options.mode === 'DEEP_DIVE') {
+      const response = await fetch(`${BASE_URL}/event/getEvents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          resultType: "events",
+          eventsSortBy: options.sortFocus === 'VIRALITY' ? 'socialScore' : 'size', // Default to size/importance
+          eventsCount: 1,
+          // Filters
+          keyword: options.keyword,
+          conceptUri: options.conceptUri ? [options.conceptUri] : undefined,
+          categoryUri: options.categoryUri ? [options.categoryUri] : undefined,
+          locationUri: options.locationUri ? [options.locationUri] : undefined,
+          lang: ["eng"],
+          forceMaxDataTimeWindow: 31
+        })
+      });
 
-    if (!articles || articles.length === 0) {
-      console.warn("⚠️ NewsAPI found no articles in stream.");
-      return null;
+      const data = await response.json();
+      const event = data.events?.results?.[0];
+
+      if (!event) return null;
+
+      // Construct context from event metadata
+      const summary = event.summary?.eng || event.title?.eng || "No summary available.";
+      
+      return {
+        title: event.title?.eng || "Major Event",
+        body: `EVENT SUMMARY: ${summary}\n\nTOPIC: ${options.keyword || options.categoryUri || 'Global News'}`,
+        source: 'Global News Cluster',
+        image: event.images?.[0] || null,
+        date: event.eventDate,
+        is_event_summary: true
+      };
     }
 
-    // Pick the most relevant article
-    // For 'Stream', the first one is the newest. 
-    // We can also sort by 'sim' (similarity) if we used keywords, but stream is time-based.
-    // Let's pick the first valid one with a body.
-    const article = articles[0];
+    // --- MODE A: TARGETED (Get Articles) ---
+    if (options.mode === 'TARGETED') {
+      const response = await fetch(`${BASE_URL}/article/getArticles`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          resultType: "articles",
+          articlesCount: 1,
+          articlesSortBy: getSortBy(options.sortFocus),
+          articleBodyLen: -1, // Full body
+          includeArticleImage: true,
+          // Filters
+          keyword: options.keyword,
+          conceptUri: options.conceptUri ? [options.conceptUri] : undefined,
+          categoryUri: options.categoryUri ? [options.categoryUri] : undefined,
+          sourceLocationUri: options.locationUri ? [options.locationUri] : undefined,
+          ignoreSourceUri: options.ignoreSource,
+          dateStart: options.dateStart,
+          lang: ["eng"],
+          forceMaxDataTimeWindow: 31
+        })
+      });
 
-    return {
-      title: article.title,
-      body: article.body,
-      url: article.url,
-      source: article.source?.title || 'News Wire',
-      image: article.image
-    };
+      const data = await response.json();
+      const article = data.articles?.results?.[0];
+
+      if (!article) return null;
+
+      return {
+        title: article.title,
+        body: article.body,
+        url: article.url,
+        source: article.source?.title || 'News Source',
+        image: article.image,
+        date: article.dateTimePub
+      };
+    }
+
+    return null;
 
   } catch (error) {
     console.error("NewsAPI Fetch Failed:", error);
     return null;
   }
 }
+
+// --- UTILITY FUNCTIONS (For Hydration) ---
+
+export async function suggestCategories(label: string) {
+  const apiKey = process.env.NEWSAPI_AI_KEY;
+  if (!apiKey) return [];
+  
+  try {
+    const res = await fetch(`${BASE_URL}/suggestCategoriesFast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, prefix: label })
+    });
+    const data = await res.json();
+    return data || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function suggestLocations(label: string) {
+  const apiKey = process.env.NEWSAPI_AI_KEY;
+  if (!apiKey) return [];
+
+  try {
+    const res = await fetch(`${BASE_URL}/suggestLocationsFast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, prefix: label, count: 10, lang: "eng" })
+    });
+    const data = await res.json();
+    return data || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export async function suggestConcepts(label: string) {
+    const apiKey = process.env.NEWSAPI_AI_KEY;
+    if (!apiKey) return [];
+  
+    try {
+      const res = await fetch(`${BASE_URL}/suggestConceptsFast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, prefix: label, lang: "eng" })
+      });
+      const data = await res.json();
+      return data || [];
+    } catch (e) {
+      return [];
+    }
+  }

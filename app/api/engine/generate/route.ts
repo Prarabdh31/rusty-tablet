@@ -19,25 +19,25 @@ interface RequestBody {
     content_input?: string; 
     topic_search?: string; 
     
-    // NewsAPI Specifics
-    news_mode?: 'AUTOMATIC' | 'TAILORED';
-    news_category?: string;
-    news_topic?: string;
+    // NewsAPI V2 Params
+    news_v2_mode?: 'TARGETED' | 'DEEP_DIVE' | 'BREAKING';
+    news_keyword?: string;
+    news_category_uri?: string; 
+    news_concept_uri?: string; // Added Missing Field
+    news_location_uri?: string; 
+    news_sort?: 'RELEVANCE' | 'IMPORTANCE' | 'VIRALITY' | 'DATE';
 
     target_region?: string;        
     article_sentiment?: string;    
     complexity?: 'EASY' | 'GENERAL' | 'TECHNICAL'; 
-    
-    // New Feature: Thought Direction
     thought_direction?: string;
-
     word_count?: number; 
     layout_instructions?: string; 
     
     include_sidebar?: boolean;     
     generate_social?: boolean;  
     
-    // Image Control (From Pulse)
+    // Image Control
     preferred_image_source?: 'imagen' | 'unsplash' | 'news_source';
   };
 }
@@ -72,7 +72,6 @@ async function generateArticleText(
 ): Promise<any> {
   const apiKey = process.env.GEMINI_API_KEY;
   
-  // Defaults
   const wordCount = config.word_count || 800;
   const region = config.target_region || 'Global';
   const sentiment = config.article_sentiment || 'Objective';
@@ -175,7 +174,6 @@ async function generateArticleText(
 
     if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Gemini API Error (${response.status}):`, errorText);
         throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
     }
 
@@ -183,13 +181,11 @@ async function generateArticleText(
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!rawText) {
-        console.warn("Gemini produced no text. Retrying...");
         if (retryCount < 1) return generateArticleText(context, config, retryCount + 1);
         throw new Error("Gemini produced no text");
     }
 
-    const cleanedJson = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanedJson);
+    return JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
   } catch (error: any) {
     console.error("Gemini Generation Failed:", error);
     throw new Error(`Failed to generate article: ${error.message}`);
@@ -214,7 +210,7 @@ export async function POST(req: NextRequest) {
 
     // 1. DATA INGESTION
     if (mode === 'MANUAL') {
-      if (!config.content_input) throw new Error("Content input required for Manual mode");
+      if (!config.content_input) throw new Error("Content input required");
       contextData = config.content_input;
       sourceUrl = "Manual Input";
     } 
@@ -231,15 +227,20 @@ export async function POST(req: NextRequest) {
       sourceUrl = randomItem.link;
     }
     else if (mode === 'NEWS_API_AI') {
+      // V2 Logic with full parameter mapping
       const newsResult = await fetchNewsContext({
-        mode: config.news_mode || 'AUTOMATIC',
-        region: config.target_region,
-        category: config.news_category,
-        topic: config.news_topic
+        mode: config.news_v2_mode || 'TARGETED',
+        keyword: config.news_keyword,
+        categoryUri: config.news_category_uri,
+        locationUri: config.news_location_uri,
+        conceptUri: config.news_concept_uri, // Added Support
+        sortFocus: config.news_sort
       });
+
       if (!newsResult) throw new Error("NewsAPI failed to find articles.");
+
       contextData = `Headline: ${newsResult.title}\n\nBody:\n${newsResult.body}`;
-      sourceUrl = newsResult.url;
+      sourceUrl = newsResult.url || 'NewsAPI';
       if (newsResult.image) newsApiImage = newsResult.image;
     }
     else {
@@ -249,7 +250,7 @@ export async function POST(req: NextRequest) {
     // 2. GENERATION
     const articleData = await generateArticleText(contextData, config);
 
-    // 3. ASSET PIPELINE (Logic Update)
+    // 3. ASSET PIPELINE
     const visualPlan = articleData.visual_plan || [];
     let finalContent = articleData.content;
     let featuredImageUrl: string | null = null;
@@ -270,8 +271,6 @@ export async function POST(req: NextRequest) {
         let source = '';
         let credit = '';
 
-        // Priority 1: Check News Source Image (Only for Featured)
-        // If preferred source is 'news_source' OR default logic, we try this.
         const tryNewsSource = item.type === 'FEATURED' && newsApiImage && (preferredSource === 'news_source' || preferredSource === 'imagen');
         
         if (tryNewsSource && newsApiImage) {
@@ -284,7 +283,6 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Priority 2: Unsplash (If preferred explicitly OR if News Source failed/not desired)
         if (!buffer && preferredSource === 'unsplash') {
            if (item.search_keyword) {
              console.log(`[Asset] Preferred: Unsplash search: ${item.search_keyword}`);
@@ -297,8 +295,6 @@ export async function POST(req: NextRequest) {
            }
         }
 
-        // Priority 3: Imagen (If preferred explicitly OR default and previous methods failed)
-        // Note: We skip this if preference was 'unsplash' (unless unsplash failed, see fallback below)
         if (!buffer && (preferredSource === 'imagen' || preferredSource === 'news_source')) {
            console.log(`[Asset] Preferred: Imagen generation...`);
            buffer = await generateImagenBuffer(item.prompt);
@@ -308,8 +304,6 @@ export async function POST(req: NextRequest) {
            }
         }
 
-        // Priority 4: Ultimate Fallback (Unsplash)
-        // If we wanted Imagen but it failed, or we wanted News Source but it failed, we fall back to Unsplash.
         if (!buffer && item.search_keyword) {
            console.log(`[Asset] Fallback to Unsplash: ${item.search_keyword}`);
            const unsplashData = await getUnsplashImageBuffer(item.search_keyword);
@@ -320,7 +314,6 @@ export async function POST(req: NextRequest) {
            }
         }
 
-        // Upload & Record
         if (buffer) {
           const filename = `${item.id.toLowerCase()}_${Date.now()}.png`;
           const publicUrl = await saveImageAsset(buffer, filename, {
