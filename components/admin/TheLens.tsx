@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { Search, Filter, Loader2, ArrowRight, Edit2, Eye, EyeOff, Trash2, Save, X } from 'lucide-react';
+import { Search, Filter, Loader2, ArrowRight, Edit2, Eye, EyeOff, Trash2, Save, X, Sparkles, RefreshCw } from 'lucide-react';
 
 interface TheLensProps {
   authKey: string;
@@ -14,6 +14,10 @@ export default function TheLens({ authKey }: TheLensProps) {
   const [editingArticle, setEditingArticle] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
+  
+  // AI Rewrite State
+  const [rewriteInstructions, setRewriteInstructions] = useState('');
+  const [rewriting, setRewriting] = useState(false);
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,22 +46,30 @@ export default function TheLens({ authKey }: TheLensProps) {
     if (authKey) fetchArticles();
   }, [authKey]);
 
-  // Handlers (Delete, Toggle, Save)
-  const toggleVisibility = async (id: string, currentStatus: boolean) => {
-    if (!authKey) return alert('Security Clearance Required.');
-    setArticles(prev => prev.map(a => a.id === id ? { ...a, is_published: !currentStatus } : a));
-    try {
-      await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id, is_published: !currentStatus }) });
-    } catch (error) { alert('Update failed'); fetchArticles(); }
-  };
-
-  const deleteArticle = async (id: string) => {
-    if (!authKey) return alert('Security Clearance Required.');
-    if (!confirm('Delete permanently?')) return;
-    try {
-      await fetch(`/api/admin/manage?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authKey}` } });
-      fetchArticles();
-    } catch (error) { alert('Delete failed'); }
+  const handleRewrite = async () => {
+      if (!rewriteInstructions) return alert("Please enter instructions.");
+      setRewriting(true);
+      try {
+          const res = await fetch('/api/admin/manage/rewrite', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` },
+              body: JSON.stringify({ 
+                  content: editingArticle.content, 
+                  instructions: rewriteInstructions 
+              })
+          });
+          const data = await res.json();
+          if (data.success) {
+              setEditingArticle({ ...editingArticle, content: data.rewritten });
+              setRewriteInstructions('');
+          } else {
+              alert("Rewrite failed: " + data.error);
+          }
+      } catch (e) {
+          alert("Network error during rewrite");
+      } finally {
+          setRewriting(false);
+      }
   };
 
   const handleEditSave = async (e: React.FormEvent) => {
@@ -69,6 +81,19 @@ export default function TheLens({ authKey }: TheLensProps) {
       setEditingArticle(null);
       fetchArticles();
     } catch { alert('Save failed'); }
+  };
+
+  // ... (Keep existing delete/toggle logic)
+  const toggleVisibility = async (id: string, currentStatus: boolean) => {
+    if (!authKey) return alert('Security Clearance Required.');
+    setArticles(prev => prev.map(a => a.id === id ? { ...a, is_published: !currentStatus } : a));
+    try { await fetch('/api/admin/manage', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authKey}` }, body: JSON.stringify({ id, is_published: !currentStatus }) }); } catch (error) { alert('Update failed'); fetchArticles(); }
+  };
+
+  const deleteArticle = async (id: string) => {
+    if (!authKey) return alert('Security Clearance Required.');
+    if (!confirm('Delete permanently?')) return;
+    try { await fetch(`/api/admin/manage?id=${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authKey}` } }); fetchArticles(); } catch (error) { alert('Delete failed'); }
   };
 
   const filteredArticles = articles.filter(article => {
@@ -140,60 +165,91 @@ export default function TheLens({ authKey }: TheLensProps) {
             )}
         </div>
 
-        {/* Modal */}
+        {/* Edit Modal with AI Rewrite */}
         {editingArticle && (
              <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-            <div className="bg-[#1E293B] w-full max-w-3xl rounded-sm border border-[#2C3E50] shadow-2xl max-h-[90vh] overflow-y-auto">
-              <div className="bg-[#0F172A] p-4 flex justify-between items-center sticky top-0 border-b border-[#2C3E50]">
+            <div className="bg-[#1E293B] w-full max-w-4xl rounded-sm border border-[#2C3E50] shadow-2xl max-h-[95vh] overflow-y-auto">
+              <div className="bg-[#0F172A] p-4 flex justify-between items-center sticky top-0 border-b border-[#2C3E50] z-10">
                 <h3 className="font-bold uppercase tracking-wider text-sm flex items-center gap-2 text-[#F5F5F1]">
                   <Edit2 size={16} /> Edit Record
                 </h3>
                 <button onClick={() => setEditingArticle(null)} className="text-[#64748B] hover:text-[#B7410E]"><X size={20} /></button>
               </div>
-              <form onSubmit={handleEditSave} className="p-6 space-y-6">
-                <div>
-                  <label className="block text-xs font-bold uppercase text-[#64748B] mb-1">Headline</label>
-                  <input 
-                    type="text" 
-                    value={editingArticle.title} 
-                    onChange={e => setEditingArticle({...editingArticle, title: e.target.value})}
-                    className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm font-serif text-lg text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase text-[#64748B] mb-1">Category</label>
-                  <input 
-                    type="text" 
-                    value={editingArticle.category} 
-                    onChange={e => setEditingArticle({...editingArticle, category: e.target.value})}
-                    className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold uppercase text-[#64748B] mb-1">Content (Markdown)</label>
-                  <textarea 
-                    value={editingArticle.content} 
-                    onChange={e => setEditingArticle({...editingArticle, content: e.target.value})}
-                    rows={12}
-                    className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm font-mono text-xs text-[#F5F5F1] focus:border-[#B7410E] outline-none"
-                  />
-                </div>
-                <div className="flex justify-end gap-4 border-t border-[#2C3E50] pt-4">
-                  <button 
-                    type="button" 
-                    onClick={() => setEditingArticle(null)}
-                    className="px-6 py-2 text-sm font-bold text-[#64748B] hover:bg-[#2C3E50] rounded-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit"
-                    className="px-6 py-2 text-sm font-bold bg-[#B7410E] text-white hover:bg-[#8F330B] rounded-sm flex items-center gap-2"
-                  >
-                    <Save size={16} /> Save Changes
-                  </button>
-                </div>
-              </form>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                  {/* Left: Editor */}
+                  <form onSubmit={handleEditSave} className="p-6 space-y-6 lg:col-span-2">
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-[#64748B] mb-1">Headline</label>
+                      <input 
+                        type="text" 
+                        value={editingArticle.title} 
+                        onChange={e => setEditingArticle({...editingArticle, title: e.target.value})}
+                        className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm font-serif text-lg text-[#F5F5F1] focus:border-[#B7410E] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-[#64748B] mb-1">Category</label>
+                      <input 
+                        type="text" 
+                        value={editingArticle.category} 
+                        onChange={e => setEditingArticle({...editingArticle, category: e.target.value})}
+                        className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm text-sm text-[#F5F5F1] focus:border-[#B7410E] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase text-[#64748B] mb-1">Content (Markdown)</label>
+                      <textarea 
+                        value={editingArticle.content} 
+                        onChange={e => setEditingArticle({...editingArticle, content: e.target.value})}
+                        rows={20}
+                        className="w-full bg-[#0F172A] border border-[#2C3E50] p-3 rounded-sm font-mono text-xs text-[#F5F5F1] focus:border-[#B7410E] outline-none"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-4 border-t border-[#2C3E50] pt-4">
+                      <button 
+                        type="button" onClick={() => setEditingArticle(null)}
+                        className="px-6 py-2 text-sm font-bold text-[#64748B] hover:bg-[#2C3E50] rounded-sm"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="submit"
+                        className="px-6 py-2 text-sm font-bold bg-[#B7410E] text-white hover:bg-[#8F330B] rounded-sm flex items-center gap-2"
+                      >
+                        <Save size={16} /> Save
+                      </button>
+                    </div>
+                  </form>
+
+                  {/* Right: AI Tools */}
+                  <div className="bg-[#0F172A] p-6 border-l border-[#2C3E50] space-y-6">
+                      <div className="flex items-center gap-2 text-[#B7410E] text-xs font-bold uppercase tracking-wider mb-4">
+                          <Sparkles size={14} /> AI Copilot
+                      </div>
+                      
+                      <div className="space-y-4">
+                          <label className="block text-[10px] uppercase text-[#64748B] font-bold">Rewrite Instructions</label>
+                          <textarea 
+                             value={rewriteInstructions}
+                             onChange={(e) => setRewriteInstructions(e.target.value)}
+                             placeholder="e.g. Make the tone more critical, fix grammar, or expand on the second paragraph..."
+                             rows={6}
+                             className="w-full bg-[#1E293B] border border-[#2C3E50] p-3 rounded-sm text-xs text-[#F5F5F1] focus:border-[#B7410E] outline-none"
+                          />
+                          <button 
+                             onClick={handleRewrite}
+                             disabled={rewriting || !rewriteInstructions}
+                             className="w-full py-3 bg-[#2C3E50] hover:bg-[#B7410E] text-white text-xs font-bold uppercase tracking-widest rounded-sm transition-colors flex justify-center items-center gap-2 disabled:opacity-50"
+                          >
+                             {rewriting ? <Loader2 className="animate-spin" size={14} /> : <RefreshCw size={14} />} 
+                             {rewriting ? 'Processing...' : 'Rewrite Article'}
+                          </button>
+                          <p className="text-[10px] text-[#64748B] italic leading-relaxed">
+                             * This will replace the content in the editor. You can review before saving.
+                          </p>
+                      </div>
+                  </div>
+              </div>
             </div>
           </div>
         )}

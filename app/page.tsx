@@ -1,11 +1,11 @@
 import { createClient } from '@/lib/supabase/server';
 import Navbar from '@/components/navigation/Navbar';
 import Link from 'next/link';
-import { Search, ArrowRight, Clock, Zap, Hash, BarChart3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, ArrowRight, Clock, Zap, Hash, BarChart3, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import ContextualSearch from '@/components/navigation/ContextualSearch';
 import NewsletterForm from '@/components/ui/NewsletterForm';
-import BriefingCarousel from '@/components/home/BriefingCarousel'; // New Import
+import BriefingCarousel from '@/components/home/BriefingCarousel';
 
 export const revalidate = 60; // Revalidate page every 60 seconds
 
@@ -159,32 +159,7 @@ const CompactCard = ({ post }: { post: any }) => {
   );
 };
 
-// --- NEW COMPONENT: VISUAL CARD (Spectrum) ---
-const VisualCard = ({ post }: { post: any }) => {
-  const image = getPostImage(post);
-  return (
-    <Link href={`/article/${post.slug}`} className="group block bg-white border border-[#2C3E50]/10 h-full flex flex-col hover:shadow-lg transition-all duration-300 rounded-sm overflow-hidden hover:-translate-y-1">
-      <div className="relative aspect-[16/9] overflow-hidden bg-[#2C3E50]">
-        {image && (
-          <img src={image} alt="" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
-        )}
-        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-1 uppercase rounded-sm">
-          {post.category}
-        </div>
-      </div>
-      <div className="p-5 flex flex-col flex-grow">
-        <h3 className="font-serif text-lg font-bold text-[#2C3E50] leading-tight mb-2 group-hover:text-[#B7410E] transition-colors">
-          {post.title}
-        </h3>
-        <p className="text-xs text-[#64748B] line-clamp-2 mt-auto pt-2 border-t border-[#2C3E50]/5">
-           {post.excerpt}
-        </p>
-      </div>
-    </Link>
-  );
-};
-
-// --- COMPONENT: CATEGORY SECTION (Updated: Removed line-clamp) ---
+// --- COMPONENT: CATEGORY SECTION ---
 const CategorySection = ({ category, posts }: { category: string, posts: any[] }) => {
   if (!posts || posts.length === 0) return null;
   return (
@@ -195,31 +170,33 @@ const CategorySection = ({ category, posts }: { category: string, posts: any[] }
         </Link>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {posts.map(post => (
-          <div key={post.id} className="group block bg-white border border-[#2C3E50]/5 p-4 hover:border-[#B7410E]/30 transition-colors shadow-sm">
-            <Link href={`/article/${post.slug}`} className="aspect-[3/2] bg-[#2C3E50]/5 mb-3 overflow-hidden rounded-sm relative block">
-              {post.featured_image && (
-                <img src={post.featured_image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-              )}
-            </Link>
-            <div className="flex justify-between items-center mb-2 text-[10px] text-[#64748B]">
-               <span suppressHydrationWarning><RelativeTime dateString={post.created_at} /></span>
-               <span>{calculateReadTime(post.content)}</span>
+        {posts.map(post => {
+          const image = getPostImage(post);
+          return (
+            <div key={post.id} className="group block bg-white border border-[#2C3E50]/5 p-4 hover:border-[#B7410E]/30 transition-colors shadow-sm">
+                <Link href={`/article/${post.slug}`} className="aspect-[3/2] bg-[#2C3E50]/5 mb-3 overflow-hidden rounded-sm relative block">
+                {image && (
+                    <img src={image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                )}
+                </Link>
+                <div className="flex justify-between items-center mb-2 text-[10px] text-[#64748B]">
+                    <span suppressHydrationWarning><RelativeTime dateString={post.created_at} /></span>
+                    <span>{calculateReadTime(post.content)}</span>
+                </div>
+                <Link href={`/article/${post.slug}`}>
+                    <h4 className="font-serif text-lg font-bold text-[#2C3E50] leading-tight mb-2 hover:text-[#B7410E] transition-colors">
+                        {post.title}
+                    </h4>
+                </Link>
             </div>
-            <Link href={`/article/${post.slug}`}>
-              {/* REMOVED line-clamp-2 */}
-              <h4 className="font-serif text-lg font-bold text-[#2C3E50] leading-tight mb-2 hover:text-[#B7410E] transition-colors">
-                {post.title}
-              </h4>
-            </Link>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
 };
 
-// --- COMPONENT: SIDEBAR CATEGORY LIST (Updated: No bullets, showing metadata) ---
+// --- COMPONENT: SIDEBAR CATEGORY LIST ---
 const SidebarCategoryList = ({ category, posts }: { category: string, posts: any[] }) => {
   if (!posts || posts.length === 0) return null;
   return (
@@ -228,17 +205,17 @@ const SidebarCategoryList = ({ category, posts }: { category: string, posts: any
         {category}
         <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
       </Link>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         {posts.map(post => (
           <Link key={post.id} href={`/article/${post.slug}`} className="group block">
-             <h5 className="font-serif text-sm font-medium text-[#2C3E50] group-hover:text-[#B7410E] transition-colors leading-snug mb-1">
-               {post.title}
-             </h5>
-             <div className="text-[10px] text-[#64748B] font-mono uppercase flex items-center gap-2">
-               <span>{post.authors?.name || 'Staff'}</span>
-               <span className="w-1 h-1 bg-[#2C3E50]/20 rounded-full"></span>
-               <span>{calculateReadTime(post.content)}</span>
-             </div>
+            <h5 className="font-serif text-sm font-medium text-[#64748B] group-hover:text-[#B7410E] transition-colors line-clamp-2 mb-1">
+              {post.title}
+            </h5>
+            <div className="text-[10px] text-[#2C3E50]/60 font-mono uppercase flex items-center gap-2">
+                <span>{post.authors?.name || 'Staff'}</span>
+                <span className="w-1 h-1 bg-[#2C3E50]/20 rounded-full"></span>
+                <span>{calculateReadTime(post.content)}</span>
+            </div>
           </Link>
         ))}
       </div>
@@ -248,23 +225,21 @@ const SidebarCategoryList = ({ category, posts }: { category: string, posts: any
 
 // --- COMPONENT: PAGINATION (Numeric) ---
 const Pagination = ({ current, total }: { current: number, total: number }) => {
-    // Generate range of pages to show (e.g., current-2 to current+2)
-    let pages = [];
+    let pages: (string | number)[] = [];
     const range = 2; 
     for (let i = Math.max(1, current - range); i <= Math.min(total, current + range); i++) {
         pages.push(i);
     }
   
-    // Always show first and last if not in range
-    if (typeof pages[0] === 'number' && pages[0] > 1) {
-        if (pages[0] > 2) pages.unshift('...'); 
+    const lastPage = pages[pages.length - 1];
+    const firstPage = pages[0];
+    
+    if (typeof firstPage === 'number' && firstPage > 1) {
+        if (firstPage > 2) pages.unshift('...'); 
         pages.unshift(1);
     }
-    if (
-      typeof pages[pages.length - 1] === 'number' &&
-      (pages[pages.length - 1] as number) < total
-    ) {
-        if ((pages[pages.length - 1] as number) < total - 1) pages.push('...');
+    if (typeof lastPage === 'number' && lastPage < total) {
+        if (lastPage < total - 1) pages.push('...');
         pages.push(total);
     }
   
@@ -307,6 +282,31 @@ const Pagination = ({ current, total }: { current: number, total: number }) => {
     );
 };
 
+// --- NEW COMPONENT: VISUAL CARD (Spectrum) ---
+const VisualCard = ({ post }: { post: any }) => {
+  const image = getPostImage(post);
+  return (
+    <Link href={`/article/${post.slug}`} className="group block bg-white border border-[#2C3E50]/10 h-full flex flex-col hover:shadow-lg transition-all duration-300 rounded-sm overflow-hidden hover:-translate-y-1">
+      <div className="relative aspect-[16/9] overflow-hidden bg-[#2C3E50]">
+        {image && (
+          <img src={image} alt="" className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+        )}
+        <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-1 uppercase rounded-sm">
+          {post.category}
+        </div>
+      </div>
+      <div className="p-5 flex flex-col flex-grow">
+        <h3 className="font-serif text-lg font-bold text-[#2C3E50] leading-tight mb-2 group-hover:text-[#B7410E] transition-colors">
+          {post.title}
+        </h3>
+        <p className="text-xs text-[#64748B] line-clamp-2 mt-auto pt-2 border-t border-[#2C3E50]/5">
+           {post.excerpt}
+        </p>
+      </div>
+    </Link>
+  );
+};
+
 export default async function Home({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const supabase = await createClient();
   const params = await searchParams;
@@ -319,7 +319,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
     .select(`
       id, slug, title, excerpt, created_at, category, featured_image, content,
       authors ( name ),
-      article_images ( public_url )
+      article_images ( public_url, usage_type )
     `)
     .eq('is_published', true)
     .order('created_at', { ascending: false })
@@ -354,14 +354,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
 
   // Data for Spectrum (Next 4 items)
   const spectrumPosts = posts.slice(15, 19);
-
+  
   // Dynamic Category Sections (Pick 2 random populated categories excluding 'General')
   const displayCats = Object.keys(categories)
     .filter(c => c !== 'General' && categories[c].length >= 3)
     .slice(0, 2);
 
   // Pagination Logic for "Recent Dispatches"
-  // Start feeding after Spectrum (1 + 5 + 9 + 4 = 19)
   const feedStartIndex = 19;
   const allFeedPosts = posts.slice(feedStartIndex);
   const totalFeedPages = Math.ceil(allFeedPosts.length / itemsPerPage);
@@ -455,7 +454,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
                   </div>
                   <Link href={`/article/${post.slug}`} className="md:col-span-4 aspect-[3/2] overflow-hidden rounded-sm bg-[#2C3E50]/5 border border-[#2C3E50]/5 block">
                     {getPostImage(post) && (
-                      <img src={getPostImage(post)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <img src={getPostImage(post) as string} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                     )}
                   </Link>
                 </div>
@@ -497,8 +496,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
 
       {/* --- FOOTER --- */}
       <footer className="bg-[#2C3E50] text-[#F5F5F1] border-t-4 border-[#B7410E] mt-auto">
-        {/* ... (Footer content unchanged) ... */}
-         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center gap-3 mb-6">
@@ -530,10 +528,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ p
             <div>
               <h5 className="font-bold text-[#B7410E] uppercase tracking-wider text-xs mb-6">Company</h5>
               <ul className="space-y-3 text-sm text-[#F5F5F1]/80">
-                <li><Link href="#" className="hover:text-[#B7410E] transition-colors">About Us</Link></li>
-                <li><Link href="#" className="hover:text-[#B7410E] transition-colors">Ghost Writers</Link></li>
+                <li><Link href="/about" className="hover:text-[#B7410E] transition-colors">About Us</Link></li>
+                <li><Link href="/contact" className="hover:text-[#B7410E] transition-colors">Contact Us</Link></li>
+                <li><Link href="/disclaimer" className="hover:text-[#B7410E] transition-colors">Disclaimer</Link></li>
+                <li><Link href="/privacy" className="hover:text-[#B7410E] transition-colors">Privacy Policy</Link></li>
                 <li><Link href="#" className="hover:text-[#B7410E] transition-colors">Advertise</Link></li>
-                <li><Link href="#" className="hover:text-[#B7410E] transition-colors">Privacy Policy</Link></li>
               </ul>
             </div>
           </div>
