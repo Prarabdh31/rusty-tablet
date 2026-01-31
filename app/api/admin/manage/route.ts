@@ -16,7 +16,11 @@ export async function GET(req: NextRequest) {
   try {
     const { data, error } = await supabaseAdmin
       .from('posts')
-      .select('id, title, slug, category, is_published, created_at, content')
+      .select(`
+        id, title, slug, category, is_published, created_at, content, 
+        featured_image, 
+        article_images ( public_url )
+      `)
       .order('created_at', { ascending: false });
 
     if (error) throw error;

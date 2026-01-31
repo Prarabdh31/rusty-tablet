@@ -2,15 +2,16 @@
 
 import { useState } from 'react';
 import Navbar from '@/components/navigation/Navbar';
-import { Ghost, Activity, Aperture, BookOpen, Radio } from 'lucide-react'; // Added Radio
+import { Ghost, Activity, Aperture, BookOpen, Globe, Radio } from 'lucide-react';
 import Manifesto from '@/components/admin/Manifesto';
 import ThePhantom from '@/components/admin/ThePhantom';
 import ThePulse from '@/components/admin/ThePulse';
 import TheLens from '@/components/admin/TheLens';
-import TheBeacon from '@/components/admin/TheBeacon'; // New Import
+import TheBeacon from '@/components/admin/TheBeacon';
+import TheSignal from '@/components/admin/TheSignal'; // New Import
 
 export default function AdminDashboard() {
-  const [activeModule, setActiveModule] = useState<'PHANTOM' | 'PULSE' | 'LENS' | 'BEACON'>('PHANTOM');
+  const [activeModule, setActiveModule] = useState<'PHANTOM' | 'PULSE' | 'LENS' | 'BEACON' | 'SIGNAL'>('PHANTOM');
   const [showManifesto, setShowManifesto] = useState(false);
   const [authKey, setAuthKey] = useState('');
 
@@ -55,27 +56,30 @@ export default function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         
         {/* --- MODULE SELECTOR --- */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
-          {['PHANTOM', 'PULSE', 'LENS', 'BEACON'].map((m) => (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-12">
+          {[
+            { id: 'PHANTOM', label: 'The Phantom', sub: 'Ghost Writer', icon: Ghost },
+            { id: 'PULSE', label: 'The Pulse', sub: 'Scheduler', icon: Activity },
+            { id: 'LENS', label: 'The Lens', sub: 'Manager', icon: Aperture },
+            { id: 'BEACON', label: 'The Beacon', sub: 'SEO & Meta', icon: Globe },
+            { id: 'SIGNAL', label: 'The Signal', sub: 'Broadcast', icon: Radio },
+          ].map((m) => (
              <button
-               key={m}
-               onClick={() => setActiveModule(m as any)}
-               className={`group relative p-6 border rounded-sm text-left transition-all overflow-hidden ${
-                 activeModule === m 
+               key={m.id}
+               onClick={() => setActiveModule(m.id as any)}
+               className={`group relative p-4 border rounded-sm text-left transition-all overflow-hidden ${
+                 activeModule === m.id 
                    ? 'bg-[#B7410E] border-[#B7410E] text-white shadow-[0_0_20px_rgba(183,65,14,0.3)]' 
                    : 'bg-[#1E293B]/50 border-[#2C3E50] text-[#64748B] hover:border-[#B7410E]/50 hover:text-[#B7410E]'
                }`}
              >
-                <div className="flex justify-between items-start mb-4">
-                  {m === 'PHANTOM' && <Ghost size={28} className={activeModule === 'PHANTOM' ? 'animate-pulse' : ''} />}
-                  {m === 'PULSE' && <Activity size={28} className={activeModule === 'PULSE' ? 'animate-pulse' : ''} />}
-                  {m === 'LENS' && <Aperture size={28} />}
-                  {m === 'BEACON' && <Radio size={28} />}
-                  <span className="text-[10px] font-mono opacity-50">MOD_0{m === 'PHANTOM' ? '1' : m === 'PULSE' ? '2' : m === 'LENS' ? '3' : '4'}</span>
+                <div className="flex justify-between items-start mb-3">
+                  <m.icon size={24} className={activeModule === m.id ? 'animate-pulse' : ''} />
+                  <span className="text-[9px] font-mono opacity-50">MOD_0{['PHANTOM','PULSE','LENS','BEACON','SIGNAL'].indexOf(m.id) + 1}</span>
                 </div>
-                <h3 className="font-bold text-xl uppercase tracking-wider mb-1">The {m.charAt(0) + m.slice(1).toLowerCase()}</h3>
-                <p className="text-xs opacity-70 font-mono">
-                  {m === 'PHANTOM' ? 'Ghost Writer Engine' : m === 'PULSE' ? 'Automated Scheduler' : m === 'LENS' ? 'Article Manager' : 'SEO & Visibility'}
+                <h3 className="font-bold text-sm uppercase tracking-wider mb-0.5">{m.label}</h3>
+                <p className="text-[10px] opacity-70 font-mono">
+                  {m.sub}
                 </p>
              </button>
           ))}
@@ -97,6 +101,10 @@ export default function AdminDashboard() {
 
           {activeModule === 'BEACON' && (
              <TheBeacon authKey={authKey} />
+          )}
+
+          {activeModule === 'SIGNAL' && (
+             <TheSignal authKey={authKey} />
           )}
         </div>
       </div>
