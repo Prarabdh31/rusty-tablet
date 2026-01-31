@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/providers/AuthProvider";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import Script from "next/script";
+import { createClient } from "@supabase/supabase-js";
 
 const merriweather = Merriweather({ 
   subsets: ["latin"],
@@ -20,10 +21,57 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Rusty Tablet",
-  description: "Digital Industrialism for the modern thinker.",
-};
+// Dynamic Metadata from "The Beacon"
+export async function generateMetadata(): Promise<Metadata> {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const { data: settings } = await supabase
+    .from('site_settings')
+    .select('key, value');
+
+  const config = settings?.reduce((acc: any, curr: any) => {
+    acc[curr.key] = curr.value;
+    return acc;
+  }, {}) || {};
+
+  const title = config.site_name || "Rusty Tablet";
+  const description = config.site_description || "Digital Industrialism for the modern thinker.";
+
+  return {
+    metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://www.rustytablet.com'),
+    title: {
+      default: title,
+      template: `%s | ${title}`,
+    },
+    description: description,
+    keywords: config.site_keywords ? config.site_keywords.split(',').map((k: string) => k.trim()) : [],
+    openGraph: {
+      title: title,
+      description: description,
+      siteName: title,
+      locale: config.language || 'en-US',
+      type: 'website',
+      images: [
+        {
+          url: '/opengraph-image.png', // Default fallback
+          width: 1200,
+          height: 630,
+          alt: title,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: title,
+      description: description,
+      creator: config.twitter_handle || '@rustytablet',
+    },
+    // Removed 'icons' property to let app/icon.tsx and app/apple-icon.tsx handle it automatically
+  };
+}
 
 export default function RootLayout({
   children,
@@ -48,7 +96,7 @@ export default function RootLayout({
         )}
       </head>
       <body className={`${merriweather.variable} ${inter.variable} font-sans min-h-screen relative`}>
-        {/* Google Analytics via next/script to prevent hydration errors */}
+        {/* Google Analytics - Moved to next/script in body to fix hydration errors */}
         <Script 
           src="https://www.googletagmanager.com/gtag/js?id=G-CXCE30BVHL"
           strategy="afterInteractive"

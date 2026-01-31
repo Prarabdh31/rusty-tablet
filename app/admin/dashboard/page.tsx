@@ -2,14 +2,15 @@
 
 import { useState } from 'react';
 import Navbar from '@/components/navigation/Navbar';
-import { Ghost, Activity, Aperture, BookOpen } from 'lucide-react';
+import { Ghost, Activity, Aperture, BookOpen, Radio } from 'lucide-react'; // Added Radio
 import Manifesto from '@/components/admin/Manifesto';
 import ThePhantom from '@/components/admin/ThePhantom';
 import ThePulse from '@/components/admin/ThePulse';
 import TheLens from '@/components/admin/TheLens';
+import TheBeacon from '@/components/admin/TheBeacon'; // New Import
 
 export default function AdminDashboard() {
-  const [activeModule, setActiveModule] = useState<'PHANTOM' | 'PULSE' | 'LENS'>('PHANTOM');
+  const [activeModule, setActiveModule] = useState<'PHANTOM' | 'PULSE' | 'LENS' | 'BEACON'>('PHANTOM');
   const [showManifesto, setShowManifesto] = useState(false);
   const [authKey, setAuthKey] = useState('');
 
@@ -54,8 +55,8 @@ export default function AdminDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         
         {/* --- MODULE SELECTOR --- */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {['PHANTOM', 'PULSE', 'LENS'].map((m) => (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+          {['PHANTOM', 'PULSE', 'LENS', 'BEACON'].map((m) => (
              <button
                key={m}
                onClick={() => setActiveModule(m as any)}
@@ -69,11 +70,12 @@ export default function AdminDashboard() {
                   {m === 'PHANTOM' && <Ghost size={28} className={activeModule === 'PHANTOM' ? 'animate-pulse' : ''} />}
                   {m === 'PULSE' && <Activity size={28} className={activeModule === 'PULSE' ? 'animate-pulse' : ''} />}
                   {m === 'LENS' && <Aperture size={28} />}
-                  <span className="text-[10px] font-mono opacity-50">MOD_0{m === 'PHANTOM' ? '1' : m === 'PULSE' ? '2' : '3'}</span>
+                  {m === 'BEACON' && <Radio size={28} />}
+                  <span className="text-[10px] font-mono opacity-50">MOD_0{m === 'PHANTOM' ? '1' : m === 'PULSE' ? '2' : m === 'LENS' ? '3' : '4'}</span>
                 </div>
                 <h3 className="font-bold text-xl uppercase tracking-wider mb-1">The {m.charAt(0) + m.slice(1).toLowerCase()}</h3>
                 <p className="text-xs opacity-70 font-mono">
-                  {m === 'PHANTOM' ? 'Ghost Writer Engine' : m === 'PULSE' ? 'Automated Scheduler' : 'Article Manager'}
+                  {m === 'PHANTOM' ? 'Ghost Writer Engine' : m === 'PULSE' ? 'Automated Scheduler' : m === 'LENS' ? 'Article Manager' : 'SEO & Visibility'}
                 </p>
              </button>
           ))}
@@ -82,7 +84,7 @@ export default function AdminDashboard() {
         {/* --- MODULE VIEWPORT --- */}
         <div className="border-t border-[#2C3E50] pt-12 relative min-h-[600px]">
           {activeModule === 'PHANTOM' && (
-             <ThePhantom authKey={authKey} onSuccess={() => { /* Optional: refresh global stats */ }} />
+             <ThePhantom authKey={authKey} onSuccess={() => {}} />
           )}
 
           {activeModule === 'PULSE' && (
@@ -91,6 +93,10 @@ export default function AdminDashboard() {
 
           {activeModule === 'LENS' && (
              <TheLens authKey={authKey} />
+          )}
+
+          {activeModule === 'BEACON' && (
+             <TheBeacon authKey={authKey} />
           )}
         </div>
       </div>

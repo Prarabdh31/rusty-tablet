@@ -14,6 +14,7 @@ import NewsletterForm from '@/components/ui/NewsletterForm';
 import ArticleActions from '@/components/article/ArticleActions';
 import ChartWidget from '@/components/article/ChartWidget';
 import AdUnit from '@/components/ads/AdUnit';
+import ArticleSchema from '@/components/seo/ArticleSchema'; // New Import
 
 export const dynamic = 'force-dynamic';
 
@@ -107,6 +108,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
   return (
     <main className="min-h-screen bg-[#F5F5F1] font-sans selection:bg-[#B7410E] selection:text-white pb-24">
+      {/* Inject Structured Data for SEO */}
+      <ArticleSchema post={post} />
+      
       <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -263,7 +267,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
             {/* AD SLOT: SIDEBAR (RECTANGLE) */}
             <AdUnit 
-              slotId="1234567890" // REPLACE THIS WITH REAL AD SLOT ID
+              slotId="1234567890" // REPLACE WITH REAL SLOT ID
               format="rectangle"
               className="w-full aspect-[3/4] bg-[#E5E5E1] border border-dashed border-[#2C3E50]/30"
               label="Advertisement"
